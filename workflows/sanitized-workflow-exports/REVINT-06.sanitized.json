@@ -1,0 +1,221 @@
+{
+  "name": "REVINT-06 | Manager Form Gateway",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const input = $json;\n\n// n8n Form Trigger normally returns submitted fields directly.\n// This also supports a nested body if the input shape changes later.\nconst data =\n  input.body &&\n  typeof input.body === 'object'\n    ? input.body\n    : input;\n\nconst requesterNameRaw =\n  data['Requester Name'] ??\n  data.requester_name ??\n  data.requesterName ??\n  '';\n\nconst requesterIdRaw =\n  data['Requester ID'] ??\n  data.requester_id ??\n  data.requesterId ??\n  '';\n\nconst questionRaw =\n  data['Report Question'] ??\n  data.report_question ??\n  data.question ??\n  '';\n\nconst requesterName =\n  typeof requesterNameRaw === 'string'\n    ? requesterNameRaw.trim()\n    : '';\n\nconst requesterId =\n  typeof requesterIdRaw === 'string' &&\n  requesterIdRaw.trim()\n    ? requesterIdRaw.trim()\n    : 'form_requester_001';\n\nconst question =\n  typeof questionRaw === 'string'\n    ? questionRaw.trim()\n    : '';\n\nconst receivedAt =\n  typeof input.submittedAt === 'string' &&\n  input.submittedAt.trim()\n    ? input.submittedAt\n    : new Date().toISOString();\n\nreturn {\n  channel: 'form',\n\n  requester_id: requesterId,\n\n  requester_name:\n    requesterName || 'Form Requester',\n\n  question,\n\n  source: 'form_submission',\n\n  received_at: receivedAt,\n\n  environment: 'development',\n\n  status: 'received'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        -112
+      ],
+      "id": "044ff44e-e7e5-452d-9ed4-deffb1e07ad6",
+      "name": "CTX | Normalize Form Request",
+      "notesInFlow": true,
+      "notes": "Node ID: CTX-006\n\nPurpose:\nNormalizes raw manager form submissions into the standard internal request envelope used by the Revenue Intelligence workflow.\n\nResponsibility:\n- Reads Requester Name, Requester ID, and Report Question from the form submission.\n- Sets channel = form.\n- Sets source = form_submission.\n- Applies a controlled default requester ID when no requester ID is supplied.\n- Preserves the form submission timestamp when available.\n- Produces the standard request structure required by CTX-002 and downstream validation.\n\nSecurity / Governance:\n- Accepts business request information only.\n- Does not interpret KPI intent, authorize metrics, generate SQL, access PostgreSQL, or select delivery destinations.\n- Does not accept or create database credentials, SQL templates, table names, or executable queries.\n- All normalized requests continue through the same shared validation and governance controls as other intake channels.\n\nExpected Output:\nchannel = form\nrequester_id = submitted value or form_requester_001\nrequester_name = submitted value or Form Requester\nquestion = submitted Report Question\nsource = form_submission\nenvironment = development\nstatus = received"
+    },
+    {
+      "parameters": {
+        "authentication": "basicAuth",
+        "formTitle": "Revenue Intelligence Report Request",
+        "formDescription": "Submit a revenue reporting question to the governed Revenue Intelligence reporting workflow.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Requester Name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Requester ID"
+            },
+            {
+              "fieldLabel": "Report Question",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -544,
+        -112
+      ],
+      "id": "1b6a05e0-723e-43b1-81a1-324f3188ceb7",
+      "name": "INT | Manager Report Form",
+      "webhookId": "[REDACTED]",
+      "notesInFlow": true,
+      "notes": "COMPONENT ID\nINT-003\n\nNODE NAME\nINT | Manager Report Form\n\nNODE TYPE\nn8n Form Trigger\n\nPHASE\nPhase 7 — Slack / Form / API Delivery\nPhase 9 — Security + Audit + Testing\n\nPURPOSE\nProvide an authenticated manager-facing form for governed revenue reporting requests.\n\nRESPONSIBILITY\nAccept manager identity and natural-language reporting questions.\n\nRequire authentication before the production form can be accessed.\n\nPass authenticated form submissions to the standard REVINT request normalization and governance pipeline.\n\nAUTHORIZED INPUT\nAuthenticated Form submission containing:\nRequester Name\nRequester ID\nReport Question\n\nAUTHENTICATION CONTRACT\nAuthentication = Basic Auth\n\nProduction exposure at the verified Phase 9 checkpoint is localhost only.\n\nOnly callers presenting valid credentials may access and submit the production manager form.\n\nAuthentication credentials are stored only in n8n Credentials.\n\nUnauthenticated access must fail before the form becomes available.\n\nIf this form is later exposed beyond localhost or through a public domain, tunnel, reverse proxy, or hosted environment, the access boundary must be reviewed again and public transport must use HTTPS.\n\nSECURITY BOUNDARY\nAuthentication controls access to the form.\n\nAuthentication does not grant SQL authority, KPI authority, database authority, or delivery authority.\n\nEvery submitted request must still pass:\nRequest envelope validation\nKPI catalogue governance\nApproved query validation\nRuntime parameter validation\nPG | Reporting RO execution\nResult validation\nPresentation and delivery controls\n\nCredentials, SQL templates, database names, internal audit data, and workflow implementation details must never be exposed through the form.\n\nOUTPUT\nAuthenticated manager request passed to:\nCTX | Normalize Form Request\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO REPORTING DATABASE ACCESS\nNO CREDENTIAL EXPOSURE\n\nSTATUS\nPhase 7 verified form intake\nPhase 9 Basic Auth access boundary verified\nUnauthenticated production-form access blocked\nAuthenticated end-to-end production Form execution verified"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "QI0Mz2DwT3AEtP5M",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/QI0Mz2DwT3AEtP5M",
+          "cachedResultName": "REVINT-01 | Manager Request Orchestrator"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -80,
+        -112
+      ],
+      "id": "12c2437d-aa0b-41ab-b5c7-204f429aad53",
+      "name": "INT-004 | Submit Governed Form Request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "bb4d98b7-eba1-4553-889d-026d32724089",
+              "leftValue": "={{ $json.form_return_status }}",
+              "rightValue": "ready",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        144,
+        -112
+      ],
+      "id": "cd5c68a8-759a-46a8-9f8f-667654c86c1e",
+      "name": "VAL | Form Return Successful?",
+      "notesInFlow": true,
+      "notes": "COMPONENT ID\nVAL-029\n\nNODE NAME\nVAL | Form Return Successful?\n\nNODE TYPE\nIf\n\nPHASE\nPhase 7 — Slack / Form / API Delivery\n\nPURPOSE\nRoutes the result returned from the core Revenue Intelligence\norchestrator to the correct browser-facing Form Ending page.\n\nRESPONSIBILITY\nChecks the bounded form_return_status returned by REVINT-01.\n\nSuccessful governed results continue to the success Form\nEnding page.\n\nRejected results continue to the safe rejection Form Ending\npage.\n\nAUTHORIZED INPUT\nform_return\nform_return_status\n\nVALIDATION CONTRACT\nTRUE:\nform_return_status = ready\n\nFALSE:\nform_return_status != ready\n\nSECURITY BOUNDARY\nThe gateway does not inspect internal SQL, audit data,\ncredentials, AI prompts, or governance internals.\n\nRouting is based only on the bounded return contract produced\nby REVINT-01.\n\nOUTPUT\nTRUE → DEL-014 success Form Ending\nFALSE → DEL-015 safe rejection Form Ending\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\n\nSTATUS\n🟡 In Progress — Form return routing configured and awaiting\ngenuine end-to-end Form verification."
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "showText",
+        "responseText": "={{\n`\n<h1>${$json.form_return?.report?.title ?? 'Revenue Intelligence Report'}</h1>\n\n<p><strong>Summary</strong></p>\n<p>${$json.form_return?.report?.summary ?? 'Report completed successfully.'}</p>\n\n<p><strong>Key Facts</strong></p>\n<ul>\n${($json.form_return?.report?.key_facts ?? [])\n  .map(fact => `<li>${fact}</li>`)\n  .join('')}\n</ul>\n\n${$json.form_return?.report?.management_interpretation\n  ? `<p><strong>Management Interpretation</strong></p>\n     <p>${$json.form_return.report.management_interpretation}</p>`\n  : ''}\n\n${$json.form_return?.report?.recommended_action\n  ? `<p><strong>Recommended Action</strong></p>\n     <p>${$json.form_return.report.recommended_action}</p>`\n  : ''}\n\n<p><strong>Request ID</strong><br>\n${$json.form_return?.request_id ?? 'Unavailable'}</p>\n`\n}}"
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        368,
+        -208
+      ],
+      "id": "6b153367-c75d-49df-b75e-2416a52111ee",
+      "name": "DEL | Display Governed Form Report",
+      "webhookId": "[REDACTED]",
+      "notesInFlow": true,
+      "notes": "COMPONENT ID\nDEL-014\n\nNODE NAME\nDEL | Display Governed Form Report\n\nNODE TYPE\nn8n Form — Form Ending\nShow Text\n\nPHASE\nPhase 7 — Slack / Form / API Delivery\n\nPURPOSE\nDisplays the successfully governed revenue report to the\nmanager in the browser after the Form request completes.\n\nRESPONSIBILITY\nRenders approved report-facing content returned by REVINT-01.\n\nDisplays the report title, summary, key facts, optional\nmanagement interpretation, optional recommended action, and\nrequest ID.\n\nAUTHORIZED INPUT\nform_return_status = ready\nform_return.status = success\nform_return.report\nform_return.request_id\n\nDISPLAY CONTRACT\nReport title\nSummary\nKey facts\nManagement interpretation when available\nRecommended action when available\nRequest ID\n\nSECURITY BOUNDARY\nOnly the bounded form_return object is rendered.\n\nSQL templates, query parameters, database credentials,\naudit internals, AI prompts, validation internals, and\nworkflow implementation details are not displayed.\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\n\nSTATUS\n🟡 In Progress — browser-facing governed Form success page\nconfigured and awaiting genuine verification."
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "showText",
+        "responseText": "={{\n`\n<h1>Report Request Could Not Be Completed</h1>\n\n<p>${\n  $json.form_return?.error?.message ??\n  'The requested report response could not be prepared safely.'\n}</p>\n\n<p><strong>Reference</strong><br>\n${$json.form_return?.request_id ?? 'Unavailable'}</p>\n\n<p>Please review the report request and try again.</p>\n`\n}}"
+      },
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        368,
+        -16
+      ],
+      "id": "16cf64e5-6209-4980-89c6-a45e1dcef587",
+      "name": "DEL | Display Safe Form Rejection",
+      "webhookId": "[REDACTED]",
+      "notesInFlow": true,
+      "notes": "COMPONENT ID\nDEL-015\n\nNODE NAME\nDEL | Display Safe Form Rejection\n\nNODE TYPE\nn8n Form — Form Ending\nShow Text\n\nPHASE\nPhase 7 — Slack / Form / API Delivery\n\nPURPOSE\nDisplays a safe browser-facing rejection when the governed\nForm report response cannot be approved.\n\nRESPONSIBILITY\nReturns a stable manager-facing error message and request ID\nwithout exposing internal failure details.\n\nAUTHORIZED INPUT\nform_return_status = rejected\nform_return.status = error\nform_return.error\nform_return.request_id\n\nDISPLAY CONTRACT\nSafe rejection message\nRequest reference ID\n\nSECURITY BOUNDARY\nInternal validation errors, SQL, database credentials,\nquery parameters, stack traces, audit records, AI prompts,\nnode names, and workflow implementation details are never\ndisplayed.\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\n\nSTATUS\n🟡 In Progress — safe Form rejection page configured and\nawaiting controlled verification."
+    }
+  ],
+  "connections": {
+    "CTX | Normalize Form Request": {
+      "main": [
+        [
+          {
+            "node": "INT-004 | Submit Governed Form Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "INT-004 | Submit Governed Form Request": {
+      "main": [
+        [
+          {
+            "node": "VAL | Form Return Successful?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VAL | Form Return Successful?": {
+      "main": [
+        [
+          {
+            "node": "DEL | Display Governed Form Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "DEL | Display Safe Form Rejection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "INT | Manager Report Form": {
+      "main": [
+        [
+          {
+            "node": "CTX | Normalize Form Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "qKK2zs6YJBBABFZU",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "nodeGroups": [],
+  "tags": []
+}

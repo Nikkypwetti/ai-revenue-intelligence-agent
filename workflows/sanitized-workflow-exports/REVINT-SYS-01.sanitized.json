@@ -1,0 +1,543 @@
+{
+  "name": "REVINT-SYS-01 | Error Handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4d3c7eba-30f8-468c-acba-3dd294155b1b",
+      "name": "SYS-001 | SYS | Workflow Error Trigger",
+      "notes": "COMPONENT ID\nSYS-001\n\nNODE NAME\nSYS | Workflow Error Trigger\n\nNODE TYPE\nError Trigger\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nReceives genuine failed workflow executions from n8n and\nstarts centralized Revenue Intelligence error handling.\n\nRESPONSIBILITY\nActs as the only entry trigger for REVINT-SYS-01.\n\nReceives execution, workflow, node, and error metadata from\nworkflows configured to use REVINT-SYS-01 as their Error\nWorkflow.\n\nAUTHORIZED INPUT\nn8n-generated workflow failure payload only.\n\nERROR CONTRACT\nSource must be an n8n workflow failure execution.\n\nNo requester-supplied object is treated as a trusted error\nevent without normalization.\n\nSECURITY BOUNDARY\nDoes not retry workflows.\n\nDoes not change reporting data.\n\nDoes not send alerts.\n\nDoes not classify failures.\n\nDoes not execute reporting SQL.\n\nOUTPUT\nRaw n8n error-trigger payload for SYS-002.\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO AUTOMATIC RETRY\n\nSTATUS\n🟡 In Progress — centralized error trigger configured and\nawaiting genuine failure verification."
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json ?? {};\n\nconst execution =\n  input.execution &&\n  typeof input.execution === 'object'\n    ? input.execution\n    : {};\n\nconst workflow =\n  input.workflow &&\n  typeof input.workflow === 'object'\n    ? input.workflow\n    : {};\n\nconst error =\n  execution.error &&\n  typeof execution.error === 'object'\n    ? execution.error\n    : (\n        input.error &&\n        typeof input.error === 'object'\n          ? input.error\n          : {}\n      );\n\nconst firstNonEmpty = (...values) => {\n  for (const value of values) {\n    if (\n      value !== undefined &&\n      value !== null &&\n      String(value).trim() !== ''\n    ) {\n      return value;\n    }\n  }\n\n  return null;\n};\n\nconst rawHttpStatus = firstNonEmpty(\n  error.httpStatus,\n  error.httpCode,\n  error.statusCode,\n  error.status,\n  error.response?.status,\n  error.cause?.statusCode\n);\n\nlet httpStatus = null;\n\nif (rawHttpStatus !== null) {\n  const parsed = Number(rawHttpStatus);\n\n  if (\n    Number.isInteger(parsed) &&\n    parsed >= 100 &&\n    parsed <= 599\n  ) {\n    httpStatus = parsed;\n  }\n}\n\nconst errorMessageRaw = firstNonEmpty(\n  error.message,\n  error.description,\n  input.message,\n  'Unknown workflow failure'\n);\n\nconst errorMessage =\n  String(errorMessageRaw).slice(0, 4000);\n\nconst stackRaw =\n  typeof error.stack === 'string'\n    ? error.stack\n    : null;\n\nconst errorStack =\n  stackRaw\n    ? stackRaw.slice(0, 8000)\n    : null;\n\nconst executionId =\n  firstNonEmpty(\n    execution.id,\n    input.executionId,\n    input.execution_id\n  );\n\nconst workflowId =\n  firstNonEmpty(\n    workflow.id,\n    input.workflowId,\n    input.workflow_id\n  );\n\nconst workflowName =\n  firstNonEmpty(\n    workflow.name,\n    input.workflowName,\n    input.workflow_name,\n    'Unknown Workflow'\n  );\n\nconst nodeName =\n  firstNonEmpty(\n    execution.lastNodeExecuted,\n    error.node?.name,\n    error.nodeName,\n    input.node_name,\n    'Unknown Node'\n  );\n\nconst occurredAtRaw =\n  firstNonEmpty(\n    error.timestamp,\n    input.timestamp,\n    null\n  );\n\nlet occurredAt =\n  new Date().toISOString();\n\nif (occurredAtRaw !== null) {\n  const rawString =\n    String(occurredAtRaw).trim();\n\n  // Unix seconds or milliseconds\n  if (/^\\d+$/.test(rawString)) {\n    let numericTimestamp =\n      Number(rawString);\n\n    // Convert Unix seconds to milliseconds when needed\n    if (numericTimestamp < 1e12) {\n      numericTimestamp *= 1000;\n    }\n\n    const parsedDate =\n      new Date(numericTimestamp);\n\n    if (\n      !Number.isNaN(\n        parsedDate.getTime()\n      )\n    ) {\n      occurredAt =\n        parsedDate.toISOString();\n    }\n  } else {\n    // ISO/date-like timestamp\n    const parsedDate =\n      new Date(rawString);\n\n    if (\n      !Number.isNaN(\n        parsedDate.getTime()\n      )\n    ) {\n      occurredAt =\n        parsedDate.toISOString();\n    }\n  }\n}\n\nreturn {\n  error_context: {\n    source:\n      'n8n_error_trigger',\n\n    execution_id:\n      executionId !== null\n        ? String(executionId)\n        : null,\n\n    execution_url:\n      firstNonEmpty(\n        execution.url,\n        input.executionUrl\n      ),\n\n    retry_of_execution_id:\n      firstNonEmpty(\n        execution.retryOf,\n        execution.retry_of,\n        input.retryOf\n      ),\n\n    workflow_id:\n      workflowId !== null\n        ? String(workflowId)\n        : null,\n\n    workflow_name:\n      String(workflowName),\n\n    node_name:\n      String(nodeName),\n\n    execution_mode:\n      firstNonEmpty(\n        execution.mode,\n        input.mode,\n        'unknown'\n      ),\n\n    error_name:\n      firstNonEmpty(\n        error.name,\n        error.type,\n        'WorkflowError'\n      ),\n\n    error_code:\n      firstNonEmpty(\n        error.code,\n        error.errorCode,\n        null\n      ),\n\n    error_message:\n      errorMessage,\n\n    http_status:\n      httpStatus,\n\n    error_stack:\n      errorStack,\n\n    occurred_at:\n      occurredAt,\n\n    normalized_at:\n      new Date().toISOString(),\n\n    schema_version:\n      '1.0'\n  },\n\n  workflow_stage:\n    'error_normalized'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "637c1555-86af-4cc2-92fc-8d40de96ecf0",
+      "name": "SYS-002 | SYS | Normalize Workflow Error",
+      "notesInFlow": false,
+      "notes": "COMPONENT ID\nSYS-002\n\nNODE NAME\nSYS | Normalize Workflow Error\n\nNODE TYPE\nCode — JavaScript\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nConverts raw n8n failure payloads into one stable internal\nerror contract.\n\nRESPONSIBILITY\nExtracts workflow identity, execution identity, failed node,\nerror message, error code, HTTP status, execution mode,\nretry lineage, timestamps, and bounded stack information.\n\nHandles missing optional fields without crashing the error\nworkflow.\n\nAUTHORIZED INPUT\nRaw payload from SYS-001 only.\n\nNORMALIZATION CONTRACT\nerror_context.source = n8n_error_trigger\nerror_context.execution_id\nerror_context.execution_url\nerror_context.retry_of_execution_id\nerror_context.workflow_id\nerror_context.workflow_name\nerror_context.node_name\nerror_context.execution_mode\nerror_context.error_name\nerror_context.error_code\nerror_context.error_message\nerror_context.http_status\nerror_context.error_stack\nerror_context.occurred_at\nerror_context.normalized_at\nerror_context.schema_version = 1.0\n\nSECURITY BOUNDARY\nDoes not trust arbitrary requester input as authoritative\nfailure metadata.\n\nBounds error-message and stack sizes before downstream\npersistence.\n\nDoes not expose error details to managers.\n\nOUTPUT\nNormalized error_context object.\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO AUTOMATIC RETRY\n\nSTATUS\n🟡 In Progress — normalization contract configured and\nawaiting genuine error-trigger verification."
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\n\nconst errorContext =\n  data.error_context ?? {};\n\nconst now =\n  new Date();\n\nconst randomPart =\n  Math.random()\n    .toString(36)\n    .substring(2, 10)\n    .toUpperCase();\n\nconst incidentId =\n  `INC-${now.getTime()}-${randomPart}`;\n\nconst executionPart =\n  errorContext.execution_id ??\n  'NOEXEC';\n\nconst nodePart =\n  String(\n    errorContext.node_name ??\n    'UNKNOWN'\n  )\n    .replace(/[^a-zA-Z0-9_-]/g, '_')\n    .slice(0, 80);\n\nconst occurredPart =\n  String(\n    errorContext.occurred_at ??\n    now.toISOString()\n  )\n    .replace(/[^0-9A-Za-z]/g, '')\n    .slice(0, 30);\n\nconst idempotencyKey =\n  `ERR-${executionPart}-${nodePart}-${occurredPart}`;\n\nconst retryOf =\n  errorContext.retry_of_execution_id ??\n  null;\n\nreturn {\n  ...data,\n\n  incident: {\n    incident_id:\n      incidentId,\n\n    idempotency_key:\n      idempotencyKey,\n\n    source_execution_id:\n      errorContext.execution_id ??\n      null,\n\n    retry_of_execution_id:\n      retryOf,\n\n    attempt:\n      retryOf\n        ? 2\n        : 1,\n\n    incident_status:\n      'opened',\n\n    created_at:\n      now.toISOString(),\n\n    incident_version:\n      '1.0'\n  },\n\n  workflow_stage:\n    'incident_created'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "d55fd4d9-4982-46b3-aed2-d6bf82a66134",
+      "name": "SYS-003 | SYS | Create Incident ID",
+      "notes": "COMPONENT ID\nSYS-003\n\nNODE NAME\nSYS | Create Incident ID\n\nNODE TYPE\nCode — JavaScript\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nCreates a unique incident identity for every governed\nworkflow failure.\n\nRESPONSIBILITY\nGenerates an incident ID and idempotency key.\n\nPreserves source execution identity and retry lineage.\n\nInitializes the incident as opened for downstream\nclassification and persistence.\n\nAUTHORIZED INPUT\nNormalized error_context from SYS-002.\n\nINCIDENT CONTRACT\nincident.incident_id\nincident.idempotency_key\nincident.source_execution_id\nincident.retry_of_execution_id\nincident.attempt\nincident.incident_status = opened\nincident.created_at\nincident.incident_version = 1.0\n\nSECURITY BOUNDARY\nIncident identity is generated deterministically from trusted\nworkflow context plus an independent unique incident suffix.\n\nDoes not authorize a retry.\n\nDoes not mutate the failed execution.\n\nOUTPUT\nerror_context\nincident\nworkflow_stage = incident_created\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO AUTOMATIC RETRY\n\nSTATUS\n🟡 In Progress — incident identity generation configured and\nawaiting genuine failure verification."
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json;\n\nconst ctx =\n  data.error_context ?? {};\n\nconst message =\n  String(\n    ctx.error_message ?? ''\n  ).toLowerCase();\n\nconst nodeName =\n  String(\n    ctx.node_name ?? ''\n  ).toLowerCase();\n\nconst errorName =\n  String(\n    ctx.error_name ?? ''\n  ).toLowerCase();\n\nconst errorCode =\n  String(\n    ctx.error_code ?? ''\n  ).toLowerCase();\n\nconst httpStatus =\n  Number.isInteger(ctx.http_status)\n    ? ctx.http_status\n    : null;\n\nconst containsAny = (\n  text,\n  patterns\n) =>\n  patterns.some(\n    pattern =>\n      text.includes(pattern)\n  );\n\nconst combined =\n  `${message} ${nodeName} ${errorName} ${errorCode}`;\n\nlet errorType =\n  'unknown';\n\nlet severity =\n  'high';\n\nlet retryable =\n  false;\n\nlet recoveryStrategy =\n  'manual_review';\n\nlet classificationReason =\n  'No approved deterministic classification rule matched.';\n\n// Authentication / permission failures\nif (\n  httpStatus === 401 ||\n  httpStatus === 403 ||\n  containsAny(combined, [\n    'unauthorized',\n    'forbidden',\n    'authentication',\n    'invalid credential',\n    'credentials',\n    'permission denied',\n    'access denied'\n  ])\n) {\n  errorType =\n    'authentication_or_permission';\n\n  severity =\n    'high';\n\n  retryable =\n    false;\n\n  recoveryStrategy =\n    'manual_intervention';\n\n  classificationReason =\n    'Authentication or permission failures must not be automatically retried.';\n}\n\n// Rate limiting\nelse if (\n  httpStatus === 429 ||\n  containsAny(combined, [\n    'rate limit',\n    'too many requests'\n  ])\n) {\n  errorType =\n    'rate_limit';\n\n  severity =\n    'medium';\n\n  retryable =\n    true;\n\n  recoveryStrategy =\n    'retry_with_backoff';\n\n  classificationReason =\n    'Rate-limit failures may recover after controlled backoff.';\n}\n\n// Timeout\nelse if (\n  httpStatus === 408 ||\n  httpStatus === 504 ||\n  containsAny(combined, [\n    'timeout',\n    'timed out',\n    'etimedout'\n  ])\n) {\n  errorType =\n    'timeout';\n\n  severity =\n    'medium';\n\n  retryable =\n    true;\n\n  recoveryStrategy =\n    'retry_with_backoff';\n\n  classificationReason =\n    'Timeout failures are potentially transient.';\n}\n\n// Network / upstream service\nelse if (\n  (\n    httpStatus !== null &&\n    httpStatus >= 500 &&\n    httpStatus <= 599\n  ) ||\n  containsAny(combined, [\n    'econnreset',\n    'econnrefused',\n    'enotfound',\n    'network',\n    'socket hang up',\n    'service unavailable',\n    'bad gateway'\n  ])\n) {\n  errorType =\n    'network_or_upstream';\n\n  severity =\n    'high';\n\n  retryable =\n    true;\n\n  recoveryStrategy =\n    'retry_with_backoff';\n\n  classificationReason =\n    'Network or upstream-service failures may be transient.';\n}\n\n// Database-specific failures\nelse if (\n  containsAny(combined, [\n    'postgres',\n    'postgresql',\n    'database',\n    'sql',\n    'relation ',\n    'column ',\n    'constraint'\n  ]) ||\n  nodeName.includes('db |')\n) {\n  const permanentDbFailure =\n    containsAny(combined, [\n      'permission denied',\n      'does not exist',\n      'syntax error',\n      'violates',\n      'constraint',\n      'duplicate key',\n      'invalid input syntax'\n    ]);\n\n  errorType =\n    permanentDbFailure\n      ? 'database_query_or_integrity'\n      : 'database_connectivity';\n\n  severity =\n    'high';\n\n  retryable =\n    !permanentDbFailure;\n\n  recoveryStrategy =\n    permanentDbFailure\n      ? 'manual_intervention'\n      : 'retry_with_backoff';\n\n  classificationReason =\n    permanentDbFailure\n      ? 'Database query, permission, or integrity failures require correction rather than blind retry.'\n      : 'Database connectivity failures may be transient.';\n}\n\n// Validation / governed rejection\nelse if (\n  containsAny(combined, [\n    'validation',\n    'invalid payload',\n    'schema',\n    'not allowed',\n    'unsupported',\n    'rejected'\n  ]) ||\n  nodeName.includes('val |')\n) {\n  errorType =\n    'validation_or_contract';\n\n  severity =\n    'medium';\n\n  retryable =\n    false;\n\n  recoveryStrategy =\n    'safe_rejection';\n\n  classificationReason =\n    'Validation and contract failures should fail safely rather than retry.';\n}\n\n// AI / model provider\nelse if (\n  containsAny(nodeName, [\n    'ai |',\n    'model',\n    'openai',\n    'llm'\n  ]) ||\n  containsAny(combined, [\n    'model provider',\n    'language model',\n    'llm'\n  ])\n) {\n  errorType =\n    'ai_provider';\n\n  severity =\n    'high';\n\n  retryable =\n    false;\n\n  recoveryStrategy =\n    'provider_fallback_review';\n\n  classificationReason =\n    'Unclassified AI-provider failures require controlled provider/fallback handling.';\n}\n\n// Delivery layer\nelse if (\n  containsAny(nodeName, [\n    'del |',\n    'slack',\n    'webhook',\n    'form',\n    'email'\n  ])\n) {\n  errorType =\n    'delivery';\n\n  severity =\n    'medium';\n\n  retryable =\n    false;\n\n  recoveryStrategy =\n    'delivery_fallback_review';\n\n  classificationReason =\n    'Delivery failures require adapter-aware recovery rather than blind retry.';\n}\n\nreturn {\n  ...data,\n\n  error_classification: {\n    error_type:\n      errorType,\n\n    severity,\n\n    retryable,\n\n    recovery_strategy:\n      recoveryStrategy,\n\n    classification_reason:\n      classificationReason,\n\n    classifier_type:\n      'deterministic_rules',\n\n    classifier_version:\n      '1.0',\n\n    classified_at:\n      new Date().toISOString()\n  },\n\n  workflow_stage:\n    'error_classified'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "762d412e-e61d-4589-84b5-3551183ff905",
+      "name": "SYS-004 | SYS | Classify Error",
+      "notes": "COMPONENT ID\nSYS-004\n\nNODE NAME\nSYS | Classify Error\n\nNODE TYPE\nCode — JavaScript\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nClassifies normalized failures into governed recovery\ncategories using deterministic rules.\n\nRESPONSIBILITY\nDetermines error type, severity, retryability, and approved\nrecovery strategy.\n\nDistinguishes transient failures from validation,\nauthentication, permission, database-integrity, and unknown\nfailures.\n\nAUTHORIZED INPUT\nerror_context\nincident\n\nCLASSIFICATION CONTRACT\nerror_classification.error_type\nerror_classification.severity\nerror_classification.retryable\nerror_classification.recovery_strategy\nerror_classification.classification_reason\nerror_classification.classifier_type = deterministic_rules\nerror_classification.classifier_version = 1.0\nerror_classification.classified_at\n\nSECURITY BOUNDARY\nAI does not decide whether a failed operation may be retried.\n\nUnknown failures default to retryable = false.\n\nAuthentication, permission, validation, query-integrity, and\nunclassified failures cannot enter automatic retry merely\nbecause an execution failed.\n\nOUTPUT\nerror_context\nincident\nerror_classification\nworkflow_stage = error_classified\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — deterministic classification configured and\nawaiting genuine failure verification."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH input_data AS (\n    SELECT\n        $1::jsonb AS error_context,\n        $2::jsonb AS incident,\n        $3::jsonb AS classification,\n        $4::text AS fallback_environment\n),\n\nresolved_request AS (\n    SELECT\n        re.request_id,\n        re.correlation_id,\n        re.channel,\n        re.environment\n\n    FROM audit.report_events re\n    CROSS JOIN input_data i\n\n    WHERE\n        re.execution_id =\n            i.error_context ->> 'execution_id'\n\n        AND re.event_type IN (\n            'request_received',\n            'request_rejected'\n        )\n\n        -- Fail closed if a future execution somehow\n        -- contains conflicting request identity anchors.\n        AND NOT EXISTS (\n            SELECT 1\n            FROM audit.report_events conflicting\n\n            WHERE\n                conflicting.execution_id =\n                    re.execution_id\n\n                AND conflicting.event_type IN (\n                    'request_received',\n                    'request_rejected'\n                )\n\n                AND (\n                    conflicting.request_id\n                        IS DISTINCT FROM re.request_id\n\n                    OR\n\n                    conflicting.correlation_id\n                        IS DISTINCT FROM re.correlation_id\n                )\n        )\n\n    ORDER BY\n        re.event_id DESC\n\n    LIMIT 1\n),\n\nparent_error AS (\n    SELECT\n        ee.incident_id,\n        ee.attempt,\n\n        ee.request_id,\n        ee.correlation_id,\n        ee.channel,\n        ee.environment\n\n    FROM audit.error_events ee\n    CROSS JOIN input_data i\n\n    WHERE\n        ee.execution_id =\n            i.error_context\n                ->> 'retry_of_execution_id'\n\n    ORDER BY\n        ee.error_event_id DESC\n\n    LIMIT 1\n),\n\ninserted_event AS (\n    INSERT INTO audit.error_events (\n        incident_id,\n        idempotency_key,\n\n        request_id,\n        correlation_id,\n\n        event_type,\n        event_status,\n        workflow_stage,\n\n        workflow_name,\n        workflow_id,\n\n        execution_id,\n        retry_of_execution_id,\n\n        node_name,\n        operation,\n\n        channel,\n        environment,\n\n        error_type,\n        error_name,\n        error_code,\n        error_message,\n\n        http_status,\n\n        attempt,\n\n        severity,\n        retryable,\n\n        recovery_strategy,\n        incident_status,\n\n        classification_reason,\n\n        error_context,\n        classification_data,\n        payload_reference\n    )\n\n    SELECT\n        COALESCE(\n            pe.incident_id,\n            i.incident ->> 'incident_id'\n        ),\n\n        i.incident ->> 'idempotency_key',\n\n        COALESCE(\n            rr.request_id,\n            pe.request_id\n        ),\n\n        COALESCE(\n            rr.correlation_id,\n            pe.correlation_id\n        ),\n\n        'workflow_error',\n        'recorded',\n        'error_logged',\n\n        i.error_context ->> 'workflow_name',\n\n        i.error_context ->> 'workflow_id',\n\n        i.error_context ->> 'execution_id',\n\n        i.error_context\n            ->> 'retry_of_execution_id',\n\n        i.error_context ->> 'node_name',\n\n        'workflow_execution',\n\n        COALESCE(\n            rr.channel,\n            pe.channel\n        ),\n\n        COALESCE(\n            rr.environment,\n            pe.environment,\n            i.fallback_environment,\n            'development'\n        ),\n\n        i.classification ->> 'error_type',\n\n        i.error_context ->> 'error_name',\n\n        i.error_context ->> 'error_code',\n\n        i.error_context ->> 'error_message',\n\n        NULLIF(\n            i.error_context ->> 'http_status',\n            ''\n        )::integer,\n\n        COALESCE(\n            pe.attempt + 1,\n            1\n        ),\n\n        i.classification ->> 'severity',\n\n        COALESCE(\n            (\n                i.classification\n                    ->> 'retryable'\n            )::boolean,\n            FALSE\n        ),\n\n        i.classification\n            ->> 'recovery_strategy',\n\n        COALESCE(\n            i.incident\n                ->> 'incident_status',\n            'opened'\n        ),\n\n        i.classification\n            ->> 'classification_reason',\n\n        i.error_context,\n\n        i.classification,\n\n        jsonb_build_object(\n            'source',\n            i.error_context ->> 'source',\n\n            'execution_id',\n            i.error_context\n                ->> 'execution_id',\n\n            'execution_url',\n            i.error_context\n                ->> 'execution_url',\n\n            'workflow_id',\n            i.error_context\n                ->> 'workflow_id'\n        )\n\n    FROM input_data i\n\n    LEFT JOIN resolved_request rr\n        ON TRUE\n\n    LEFT JOIN parent_error pe\n        ON TRUE\n\n    ON CONFLICT (idempotency_key)\n        DO NOTHING\n\n    RETURNING *\n),\n\nselected_event AS (\n    SELECT *\n    FROM inserted_event\n\n    UNION ALL\n\n    SELECT\n        ee.*\n\n    FROM audit.error_events ee\n    CROSS JOIN input_data i\n\n    WHERE\n        ee.idempotency_key =\n            i.incident\n                ->> 'idempotency_key'\n\n        AND NOT EXISTS (\n            SELECT 1\n            FROM inserted_event\n        )\n\n    LIMIT 1\n)\n\nSELECT\n    error_event_id,\n\n    incident_id,\n    idempotency_key,\n\n    request_id,\n    correlation_id,\n\n    event_type,\n    event_status,\n\n    workflow_name,\n    workflow_id,\n\n    execution_id,\n    retry_of_execution_id,\n\n    node_name,\n    operation,\n\n    channel,\n    environment,\n\n    error_type,\n    error_name,\n    error_code,\n    error_message,\n\n    http_status,\n\n    attempt,\n\n    severity,\n    retryable,\n\n    recovery_strategy,\n    incident_status,\n\n    classification_reason,\n\n    jsonb_build_object(\n        'incident_id',\n        incident_id,\n\n        'idempotency_key',\n        idempotency_key,\n\n        'source_execution_id',\n        execution_id,\n\n        'retry_of_execution_id',\n        retry_of_execution_id,\n\n        'attempt',\n        attempt,\n\n        'incident_status',\n        incident_status,\n\n        'created_at',\n        created_at,\n\n        'incident_version',\n        '1.0'\n    ) AS incident,\n\n    error_context,\n\n    classification_data\n        AS error_classification,\n\n    payload_reference,\n\n    event_timestamp,\n\n    'error_logged'::text\n        AS workflow_stage\n\nFROM selected_event;",
+        "options": {
+          "queryReplacement": "={{\n[\n  JSON.stringify(\n    $json.error_context ?? {}\n  ),\n\n  JSON.stringify(\n    $json.incident ?? {}\n  ),\n\n  JSON.stringify(\n    $json.error_classification ?? {}\n  ),\n\n  'development'\n]\n}}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        896,
+        0
+      ],
+      "id": "13f023e9-cb0b-417a-bad1-a2a536ecba8a",
+      "name": "SYS-005 | SYS | Log Error",
+      "notes": "COMPONENT ID\nSYS-005\n\nNODE NAME\nSYS | Log Error\n\nNODE TYPE\nPostgres — Execute Query\n\nPHASE\nPhase 8 — Error Handling\nPhase 9 — Security + Audit + Testing\n\nPURPOSE\nPersist the authoritative workflow failure event and establish deterministic incident, retry, and manager-request traceability.\n\nRESPONSIBILITY\nWrite one idempotent workflow_error event to audit.error_events.\n\nResolve request_id and correlation_id only from authoritative request identity audit events for the failed execution.\n\nWhen the failed execution is a retry and no current request anchor exists, inherit request identity from the parent error event.\n\nPreserve incident lineage and increment retry attempt deterministically.\n\nAUTHORIZED INPUT\nNormalized error_context from SYS-002\nIncident context from SYS-003\nDeterministic classification from SYS-004\nFallback environment\n\nAUDIT CONTRACT\nevent_type = workflow_error\nevent_status = recorded\nworkflow_stage = error_logged\n\nRequest identity may be resolved only from:\nrequest_received\nrequest_rejected\nor the parent error event for a retry.\n\nConflicting request identity anchors must fail closed rather than selecting an arbitrary request.\n\nIDEMPOTENCY CONTRACT\nOne logical workflow failure per idempotency_key.\nON CONFLICT does not create a duplicate event.\n\nSECURITY BOUNDARY\nUses PG | Control RW.\n\nMay INSERT and SELECT audit records required for incident handling.\n\nMust not modify reporting facts.\nMust not derive request identity from arbitrary downstream report events.\nMust not allow AI to determine retryability, request identity, or database authority.\n\nOUTPUT\nAuthoritative error event\nIncident lineage\nRequest/correlation trace when deterministically available\nRetry attempt\nClassification\nRecovery metadata\n\nNO AI\nNO REPORTING SQL\nNO REPORTING DATABASE WRITE\nNO EXTERNAL API CALL\nNO ARBITRARY REQUEST-ID GUESSING\n\nSTATUS\nPhase 8 verified architecture\nPhase 9 request-traceability hardening in verification"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9cce966b-9473-4428-a1fc-d12f53f75be1",
+              "leftValue": "={{ $json.error_classification.retryable }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        0
+      ],
+      "id": "4f63e692-8972-470c-a414-06d87ddac291",
+      "name": "SYS-006 | SYS | Is Recoverable?",
+      "notes": "COMPONENT ID\nSYS-006\n\nNODE NAME\nSYS | Is Recoverable?\n\nNODE TYPE\nIf\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nRoutes persisted workflow incidents according to the\ndeterministic retryability decision produced by SYS-004.\n\nRESPONSIBILITY\nSends retryable transient failures toward controlled\nrecovery.\n\nSends non-retryable failures toward escalation and\ndead-letter handling.\n\nAUTHORIZED INPUT\nerror_classification.retryable\nincident\nerror_event_id\n\nROUTING CONTRACT\nTRUE\nerror_classification.retryable = true\n→ controlled recovery path\n\nFALSE\nerror_classification.retryable = false\n→ escalation path\n\nSECURITY BOUNDARY\nDoes not independently decide whether an error is retryable.\n\nConsumes the deterministic SYS-004 classification only.\n\nDoes not execute a retry.\n\nDoes not alter incident data.\n\nOUTPUT\nTRUE recovery branch\nFALSE escalation branch\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — recoverability router configured and\nawaiting genuine failure verification."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fb46c27f-1e0d-4e5d-bb2e-c5a1ecdb4c6c",
+              "leftValue": "={{ Number($json.attempt ?? $json.incident?.attempt ?? 1) }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1344,
+        -96
+      ],
+      "id": "69db47c9-795d-4fdd-8292-cb103ac219e3",
+      "name": "SYS-007 | SYS | Retry Budget Available?",
+      "notes": "COMPONENT ID\nSYS-007\n\nNODE NAME\nSYS | Retry Budget Available?\n\nNODE TYPE\nIf\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nEnforces the maximum permitted retry budget for a\nrecoverable incident.\n\nRESPONSIBILITY\nAllows controlled recovery only while the current incident\nhas fewer than three total execution attempts.\n\nRoutes exhausted incidents away from automatic retry and\ntoward escalation.\n\nAUTHORIZED INPUT\nattempt\nincident.incident_id\nerror_classification.retryable\n\nRETRY CONTRACT\nMaximum total attempts = 3.\n\nAttempt 1 = original execution.\nAttempt 2 = first retry.\nAttempt 3 = final retry.\n\nTRUE\nattempt < 3\n→ controlled retry path\n\nFALSE\nattempt >= 3\n→ retry budget exhausted / escalation path\n\nSECURITY BOUNDARY\nDoes not change retryability classification.\n\nDoes not execute a retry.\n\nDoes not increase the attempt counter.\n\nDoes not modify incident records.\n\nRetry budget is deterministic and cannot be selected by AI.\n\nOUTPUT\nTRUE = retry budget available\nFALSE = retry budget exhausted\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — retry budget configured and awaiting\nautomatic-recovery verification."
+    },
+    {
+      "parameters": {
+        "amount": "={{\n  Number(\n    $json.attempt ??\n    $json.incident?.attempt ??\n    1\n  ) === 1\n    ? 30\n    : 120\n}}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1520,
+        -320
+      ],
+      "id": "77c413cf-2c83-4a81-b74e-a1bc9c7105aa",
+      "name": "SYS-008 | SYS | Retry Backoff",
+      "webhookId": "[REDACTED]",
+      "notes": "COMPONENT ID\nSYS-008\n\nNODE NAME\nSYS | Retry Backoff\n\nNODE TYPE\nWait\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nApplies deterministic delay before retrying a recoverable\nworkflow failure.\n\nRESPONSIBILITY\nReduces repeated immediate requests against an unavailable\ndatabase, API, model provider, or upstream dependency.\n\nApplies progressively longer delays based on the current\nincident attempt.\n\nAUTHORIZED INPUT\nattempt\nincident.incident_id\nexecution_id\nretry_of_execution_id\n\nBACKOFF CONTRACT\nAfter attempt 1 failure:\nwait 30 seconds.\n\nAfter attempt 2 failure:\nwait 120 seconds.\n\nAttempt 3 must never reach this node because SYS-007\nexhausts the retry budget first.\n\nSECURITY BOUNDARY\nDoes not execute the retry itself.\n\nDoes not classify errors.\n\nDoes not modify database records.\n\nDoes not expose credentials.\n\nBackoff duration is deterministic and is not controlled\nby AI or requester input.\n\nOUTPUT\nPreserves the current error incident payload after the\napproved waiting period.\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — deterministic retry backoff configured and\nawaiting automatic-recovery verification."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{\n  'http://localhost:5678/api/v1/executions/'\n  + $json.execution_id\n  + '/retry'\n}}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "n8nApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"loadWorkflow\": false\n}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1728,
+        -304
+      ],
+      "id": "c7e7a8b0-d9ce-4fac-a93c-338a46a536f7",
+      "name": "SYS-009 | SYS | Retry Failed Execution",
+      "notes": "COMPONENT ID\nSYS-009\n\nNODE NAME\nSYS | Retry Failed Execution\n\nNODE TYPE\nHTTP Request\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nDispatches an approved retry for a previously failed n8n\nexecution after retryability, retry budget, and backoff\ncontrols have passed.\n\nRESPONSIBILITY\nCalls the local n8n execution retry API for the failed\nexecution identified by execution_id.\n\nRetries the workflow snapshot associated with the failed\nexecution rather than automatically loading a newer workflow\nversion.\n\nAUTHORIZED INPUT\nexecution_id\nattempt\nincident.incident_id\nerror_classification.retryable\n\nRETRY CONTRACT\nHTTP method = POST\n\nEndpoint =\n/api/v1/executions/{execution_id}/retry\n\nloadWorkflow = false\n\nRetry dispatch is allowed only after:\nSYS-006 retryable = true\nAND\nSYS-007 retry budget available = true\nAND\nSYS-008 approved backoff completed.\n\nSECURITY BOUNDARY\nUses a credential stored by n8n.\n\nAPI key must never be stored in workflow JSON, expressions,\nNode Notes, logs, or requester-controlled input.\n\nThe credential should have only execution:retry scope where\nscoped API keys are available.\n\nDoes not modify reporting data.\n\nDoes not generate arbitrary endpoint URLs.\n\nDoes not use requester-controlled execution IDs.\n\nOUTPUT\nHTTP status\nn8n retry execution response\nnew execution identity when dispatch succeeds\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nINTERNAL N8N API CALL ONLY\nNO UNCONTROLLED RETRY\n\nSTATUS\n🟡 In Progress — governed retry dispatch configured and\nawaiting production verification."
+    },
+    {
+      "parameters": {
+        "jsCode": "const response =\n  $json ?? {};\n\nconst original =\n  $('SYS-008 | SYS | Retry Backoff')\n    .item.json ?? {};\n\nconst statusCode =\n  Number(\n    response.statusCode ??\n    response.status ??\n    0\n  );\n\nconst body =\n  response.body &&\n  typeof response.body === 'object'\n    ? response.body\n    : response;\n\nconst retryExecutionId =\n  body.id !== undefined &&\n  body.id !== null\n    ? String(body.id)\n    : null;\n\nconst retryOf =\n  body.retryOf !== undefined &&\n  body.retryOf !== null\n    ? String(body.retryOf)\n    : null;\n\nconst mode =\n  body.mode !== undefined &&\n  body.mode !== null\n    ? String(body.mode)\n    : null;\n\nconst hasSuccessStatus =\n  statusCode === 200 ||\n  (\n    statusCode === 0 &&\n    retryExecutionId !== null\n  );\n\nconst hasRetryId =\n  retryExecutionId !== null &&\n  retryExecutionId.trim() !== '';\n\nconst hasParentExecution =\n  retryOf !== null &&\n  retryOf.trim() !== '';\n\nconst modeValid =\n  mode === null ||\n  mode === 'retry';\n\nconst isValid =\n  hasSuccessStatus &&\n  hasRetryId &&\n  hasParentExecution &&\n  modeValid;\n\nconst validationErrors = [];\n\nif (!hasSuccessStatus) {\n  validationErrors.push(\n    `Unexpected retry API status: ${statusCode || 'unknown'}`\n  );\n}\n\nif (!hasRetryId) {\n  validationErrors.push(\n    'Retry API response did not contain a new execution ID.'\n  );\n}\n\nif (!hasParentExecution) {\n  validationErrors.push(\n    'Retry API response did not contain retryOf.'\n  );\n}\n\nif (!modeValid) {\n  validationErrors.push(\n    `Unexpected execution mode: ${mode}`\n  );\n}\n\nreturn {\n  ...original,\n\n  retry_dispatch: {\n    is_valid:\n      isValid,\n\n    http_status:\n      statusCode || null,\n\n    retry_execution_id:\n      retryExecutionId,\n\n    retry_of_execution_id:\n      retryOf,\n\n    execution_mode:\n      mode,\n\n    validation_errors:\n      validationErrors,\n\n    validated_at:\n      new Date().toISOString(),\n\n    validator_version:\n      '1.1'\n  },\n\n  workflow_stage:\n    isValid\n      ? 'retry_dispatched'\n      : 'retry_dispatch_failed'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        -320
+      ],
+      "id": "a9c77479-9d9e-4b81-a4d7-e6e302054290",
+      "name": "SYS-010 | SYS | Validate Retry Dispatch",
+      "notes": "COMPONENT ID\nSYS-010\n\nNODE NAME\nSYS | Validate Retry Dispatch\n\nNODE TYPE\nCode — JavaScript\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nValidates that the n8n API accepted the governed retry and\ncreated a retry execution.\n\nRESPONSIBILITY\nChecks HTTP response status and retry execution identity.\n\nProduces a deterministic retry_dispatch validation object\nfor downstream routing.\n\nAUTHORIZED INPUT\nSYS-009 n8n retry API response only.\n\nVALIDATION CONTRACT\nA valid retry dispatch requires:\n\nHTTP success response.\n\nA new execution ID.\n\nA retryOf execution ID.\n\nExecution mode must be retry when mode is provided.\n\nFailure to satisfy these controls must not be treated as a\nsuccessful recovery dispatch.\n\nSECURITY BOUNDARY\nDoes not retry executions.\n\nDoes not classify the original failure.\n\nDoes not expose API credentials.\n\nDoes not modify audit records.\n\nDoes not accept AI decisions.\n\nOUTPUT\nretry_dispatch.is_valid\nretry_dispatch.http_status\nretry_dispatch.retry_execution_id\nretry_dispatch.retry_of_execution_id\nretry_dispatch.execution_mode\nretry_dispatch.validation_errors\nworkflow_stage\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — retry dispatch validator configured and\nawaiting production verification."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b464a5a5-4f39-404d-8f7a-b08530b1b502",
+              "leftValue": "={{ $json.retry_dispatch.is_valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2096,
+        -272
+      ],
+      "id": "5623b502-c8e2-4ae1-9905-fd26e30fea1d",
+      "name": "SYS-011 | SYS | Retry Dispatched?",
+      "notes": "COMPONENT ID\nSYS-011\n\nNODE NAME\nSYS | Retry Dispatched?\n\nNODE TYPE\nIf\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nRoutes the recovery workflow according to validated retry\ndispatch evidence.\n\nRESPONSIBILITY\nSends successfully dispatched retries toward recovery audit.\n\nSends failed retry dispatches toward escalation.\n\nAUTHORIZED INPUT\nretry_dispatch.is_valid\n\nROUTING CONTRACT\nTRUE\nretry_dispatch.is_valid = true\n→ retry dispatch audit path\n\nFALSE\nretry_dispatch.is_valid = false\n→ escalation path\n\nSECURITY BOUNDARY\nDoes not independently determine retryability.\n\nDoes not execute retries.\n\nDoes not alter retry budget.\n\nDoes not modify incident records.\n\nOUTPUT\nTRUE = retry dispatched\nFALSE = retry dispatch failed\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — retry dispatch router configured and\nawaiting production verification."
+    },
+    {
+      "parameters": {
+        "jsCode": "const data =\n  $json ?? {};\n\nconst classification =\n  data.error_classification ?? {};\n\nconst incident =\n  data.incident ?? {};\n\nconst retryDispatch =\n  data.retry_dispatch ?? null;\n\nconst attempt =\n  Number(\n    data.attempt ??\n    incident.attempt ??\n    1\n  );\n\nconst retryable =\n  classification.retryable === true ||\n  data.retryable === true;\n\nconst severity =\n  String(\n    data.severity ??\n    classification.severity ??\n    'high'\n  );\n\nlet reason =\n  'manual_intervention_required';\n\nlet reasonDescription =\n  'Incident requires controlled manual intervention.';\n\nif (!retryable) {\n  reason =\n    'non_retryable_failure';\n\n  reasonDescription =\n    'The deterministic classifier marked this failure as non-retryable.';\n}\nelse if (attempt >= 3) {\n  reason =\n    'retry_budget_exhausted';\n\n  reasonDescription =\n    'The incident reached the maximum permitted total of three attempts.';\n}\nelse if (\n  retryDispatch &&\n  retryDispatch.is_valid === false\n) {\n  reason =\n    'retry_dispatch_failed';\n\n  reasonDescription =\n    'The approved retry could not be successfully dispatched.';\n}\n\nconst priority =\n  severity === 'critical'\n    ? 'urgent'\n    : severity === 'high'\n      ? 'high'\n      : 'normal';\n\nreturn {\n  ...data,\n\n  escalation: {\n    reason,\n\n    reason_description:\n      reasonDescription,\n\n    priority,\n\n    alert_required:\n      true,\n\n    dead_letter_required:\n      true,\n\n    current_attempt:\n      attempt,\n\n    max_attempts:\n      3,\n\n    prepared_at:\n      new Date().toISOString(),\n\n    escalation_version:\n      '1.0'\n  },\n\n  workflow_stage:\n    'escalation_prepared'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ],
+      "id": "144b3a2e-a38e-4b04-820f-c2be066623ac",
+      "name": "SYS-012 | SYS | Prepare Escalation",
+      "notes": "COMPONENT ID\nSYS-012\n\nNODE NAME\nSYS | Prepare Escalation\n\nNODE TYPE\nCode — JavaScript\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nCreates the governed escalation context for incidents that\nmust no longer continue through automatic recovery.\n\nRESPONSIBILITY\nDistinguishes:\nnon-retryable failures,\nretry-budget exhaustion,\nand retry-dispatch failures.\n\nAUTHORIZED INPUT\nincident\nerror_event_id\nerror_context\nerror_classification\nattempt\nretry_dispatch when available\n\nESCALATION CONTRACT\nnon_retryable_failure\n→ deterministic classifier denied retry\n\nretry_budget_exhausted\n→ maximum total attempts reached\n\nretry_dispatch_failed\n→ approved retry could not be dispatched\n\nAll escalation paths require alerting and dead-letter\npersistence.\n\nSECURITY BOUNDARY\nDoes not retry executions.\n\nDoes not change deterministic retryability.\n\nDoes not send alerts.\n\nDoes not write to PostgreSQL.\n\nDoes not expose secrets or raw requester payloads.\n\nOUTPUT\nOriginal incident context\nescalation\nworkflow_stage = escalation_prepared\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — escalation context configured and awaiting\nproduction verification."
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ 'C0BSV6LS9RU' }}",
+          "mode": "id"
+        },
+        "text": "=🚨 Revenue Intelligence Incident Escalated\n\nIncident: {{ $json.incident_id ?? 'unknown' }}\nReason: {{ $json.safe_escalation_reason }}\nSeverity: {{ $json.severity ?? 'unknown' }}\nWorkflow: {{ $json.workflow_name ?? 'unknown' }}\nNode: {{ $json.node_name ?? 'unknown' }}\nExecution: {{ $json.execution_id ?? 'unknown' }}\nAttempt: {{ $json.attempt ?? 0 }}\nError Type: {{ $json.error_type ?? 'unknown' }}\nError: {{ $json.safe_error_message }}\n\nAutomatic recovery has stopped. The incident requires review.",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        2016,
+        0
+      ],
+      "id": "e841d0bc-f7b1-4507-b508-b9fef1cc6e2d",
+      "name": "SYS-013 | SYS | Send Escalation Alert",
+      "webhookId": "[REDACTED]",
+      "onError": "continueErrorOutput",
+      "notes": "COMPONENT ID\nSYS-013\n\nNODE NAME\nSYS | Send Escalation Alert\n\nNODE TYPE\nSlack — Send Message\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nAlerts the controlled operations channel when automatic\nrecovery is no longer permitted or available.\n\nRESPONSIBILITY\nSends a bounded incident summary containing incident,\nworkflow, failed node, severity, attempt, escalation reason,\nand safe error message.\n\nAUTHORIZED INPUT\nincident\nerror_context\nerror_classification\nescalation\n\nALERT CONTRACT\nAlert contains operational metadata only.\n\nRaw payloads, credentials, API keys, SQL, and full stack\ntraces are excluded.\n\nSECURITY BOUNDARY\nUses stored Slack credential.\n\nSlack failure must not prevent dead-letter persistence.\n\nDoes not retry the failed business workflow.\n\nDoes not modify reporting data.\n\nOUTPUT\nSlack delivery response or controlled Slack error result.\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nSLACK ALERT ONLY\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — escalation alert configured and awaiting\nproduction verification."
+    },
+    {
+      "parameters": {
+        "jsCode": "const response =\n  $json ?? {};\n\nconst original =\n  $('SYS-012 | SYS | Prepare Escalation')\n    .item.json ?? {};\n\nconst responseError =\n  response.error ??\n  response.message?.error ??\n  null;\n\nconst messageTs =\n  response.ts ??\n  response.message?.ts ??\n  null;\n\nconst responseOk =\n  response.ok === true ||\n  messageTs !== null;\n\nconst sent =\n  responseOk &&\n  !responseError;\n\nreturn {\n  ...original,\n\n  escalation: {\n    ...original.escalation,\n\n    alert: {\n      channel:\n        'slack',\n\n      status:\n        sent\n          ? 'sent'\n          : 'failed',\n\n      message_ts:\n        messageTs\n          ? String(messageTs)\n          : null,\n\n      error:\n        responseError\n          ? String(responseError).slice(0, 500)\n          : null,\n\n      attempted_at:\n        new Date().toISOString()\n    }\n  },\n\n  workflow_stage:\n    sent\n      ? 'escalation_alert_sent'\n      : 'escalation_alert_failed'\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        -96
+      ],
+      "id": "eaa64784-0eb5-4d02-9e03-09450fed5712",
+      "name": "SYS-014 | SYS | Normalize Alert Result",
+      "notes": "COMPONENT ID\nSYS-014\n\nNODE NAME\nSYS | Normalize Alert Result\n\nNODE TYPE\nCode — JavaScript\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nNormalizes Slack alert delivery into a deterministic result\nwhile restoring the full escalation context.\n\nRESPONSIBILITY\nRecords whether the escalation alert was sent or failed.\n\nPreserves incident data for mandatory dead-letter handling.\n\nAUTHORIZED INPUT\nSYS-013 Slack response\nSYS-012 escalation context\n\nVALIDATION CONTRACT\nAlert status must resolve to:\nsent\nor\nfailed.\n\nSlack failure never cancels dead-letter persistence.\n\nSECURITY BOUNDARY\nDoes not retry Slack automatically.\n\nDoes not retry the business workflow.\n\nDoes not write to PostgreSQL.\n\nOUTPUT\nOriginal incident context\nescalation.alert\nworkflow_stage\n\nNO AI\nNO SQL\nNO DATABASE WRITE\nNO EXTERNAL API CALL\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — alert-result normalization configured and\nawaiting production verification."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO audit.dead_letter (\n    incident_id,\n    source_error_event_id,\n\n    request_id,\n    correlation_id,\n\n    workflow_name,\n    workflow_id,\n\n    execution_id,\n    node_name,\n\n    source_channel,\n    environment,\n\n    error_type,\n    error_message,\n    http_status,\n\n    severity,\n    retryable,\n    attempt,\n\n    recovery_strategy,\n    escalation_reason,\n\n    alert_channel,\n    alert_status,\n    alert_reference,\n\n    payload_reference,\n\n    dead_letter_status\n)\nVALUES (\n    $1,\n    $2,\n\n    $3,\n    $4,\n\n    $5,\n    $6,\n\n    $7,\n    $8,\n\n    $9,\n    $10,\n\n    $11,\n    $12,\n    $13,\n\n    $14,\n    $15,\n    $16,\n\n    $17,\n    $18,\n\n    $19,\n    $20,\n    $21::jsonb,\n\n    $22::jsonb,\n\n    'open'\n)\n\nON CONFLICT (incident_id)\nDO UPDATE SET\n    source_error_event_id =\n        EXCLUDED.source_error_event_id,\n\n    execution_id =\n        EXCLUDED.execution_id,\n\n    attempt =\n        GREATEST(\n            audit.dead_letter.attempt,\n            EXCLUDED.attempt\n        ),\n\n    escalation_reason =\n        EXCLUDED.escalation_reason,\n\n    alert_status =\n        EXCLUDED.alert_status,\n\n    alert_reference =\n        EXCLUDED.alert_reference,\n\n    updated_at =\n        NOW()\n\nRETURNING\n    dead_letter_id,\n    incident_id,\n    source_error_event_id,\n\n    request_id,\n    correlation_id,\n\n    workflow_name,\n    workflow_id,\n\n    execution_id,\n    node_name,\n\n    source_channel AS channel,\n    environment,\n\n    error_type,\n    error_message,\n    http_status,\n\n    severity,\n    retryable,\n    attempt,\n\n    recovery_strategy,\n    escalation_reason,\n\n    alert_channel,\n    alert_status,\n    alert_reference,\n\n    payload_reference,\n\n    dead_letter_status,\n    dead_lettered_at,\n\n    'dead_letter_recorded'::text\n        AS workflow_stage;",
+        "options": {
+          "queryReplacement": "={{\n[\n  $json.incident_id ??\n    $json.incident?.incident_id,\n\n  Number($json.error_event_id),\n\n  $json.request_id ?? null,\n\n  $json.correlation_id ?? null,\n\n  $json.workflow_name ??\n    $json.error_context?.workflow_name,\n\n  $json.workflow_id ??\n    $json.error_context?.workflow_id ??\n    null,\n\n  $json.execution_id ??\n    $json.error_context?.execution_id,\n\n  $json.node_name ??\n    $json.error_context?.node_name ??\n    null,\n\n  $json.channel ?? null,\n\n  $json.environment ??\n    'development',\n\n  $json.error_type ??\n    $json.error_classification?.error_type,\n\n  $json.error_message ??\n    $json.error_context?.error_message,\n\n  $json.http_status ??\n    $json.error_context?.http_status ??\n    null,\n\n  $json.severity ??\n    $json.error_classification?.severity,\n\n  $json.retryable ??\n    $json.error_classification?.retryable ??\n    false,\n\n  Number(\n    $json.attempt ??\n    $json.incident?.attempt ??\n    1\n  ),\n\n  $json.recovery_strategy ??\n    $json.error_classification?.recovery_strategy,\n\n  $json.escalation?.reason,\n\n  'slack',\n\n  $json.escalation?.alert?.status ??\n    'not_attempted',\n\n  JSON.stringify(\n    $json.escalation?.alert ?? {}\n  ),\n\n  JSON.stringify(\n    $json.payload_reference ?? {}\n  )\n]\n}}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2464,
+        -96
+      ],
+      "id": "df190e35-d92f-46c9-ae7b-1d6ff31efb9a",
+      "name": "SYS-015 | SYS | Write Dead Letter",
+      "notes": "COMPONENT ID\nSYS-015\n\nNODE NAME\nSYS | Write Dead Letter\n\nNODE TYPE\nPostgres — Execute Query\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nPersists incidents that cannot continue through automatic\nrecovery into the governed dead-letter queue.\n\nRESPONSIBILITY\nCreates or safely refreshes one dead-letter record per\nincident.\n\nPreserves terminal execution, attempt, classification,\nescalation reason, and alert outcome.\n\nAUTHORIZED INPUT\nincident\nerror_event_id\nerror_context\nerror_classification\nescalation\npayload_reference\n\nDEAD-LETTER CONTRACT\nOne dead-letter record per incident_id.\n\ndead_letter_status = open.\n\nOnly safe payload references are stored.\n\nRaw requester payload and stack trace are excluded.\n\nSECURITY BOUNDARY\nUses PG | Control RW.\n\nWrites only to audit.dead_letter.\n\nDoes not modify reporting facts.\n\nDoes not execute retries.\n\nOUTPUT\ndead_letter_id\nincident_id\nterminal execution metadata\nescalation reason\nalert status\ndead_letter_status\nworkflow_stage = dead_letter_recorded\n\nNO AI\nNO REPORTING SQL\nNO EXTERNAL API CALL\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — dead-letter persistence configured and\nawaiting production verification."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO audit.error_events (\n    incident_id,\n    idempotency_key,\n\n    request_id,\n    correlation_id,\n\n    event_type,\n    event_status,\n    workflow_stage,\n\n    workflow_name,\n    workflow_id,\n\n    execution_id,\n    retry_of_execution_id,\n\n    node_name,\n    operation,\n\n    channel,\n    environment,\n\n    error_type,\n    error_name,\n    error_code,\n    error_message,\n\n    http_status,\n    attempt,\n\n    severity,\n    retryable,\n\n    recovery_strategy,\n    incident_status,\n\n    classification_reason,\n\n    error_context,\n    classification_data,\n    payload_reference\n)\nVALUES (\n    $1,\n    $2,\n\n    $3,\n    $4,\n\n    'incident_escalated',\n    'recorded',\n    'dead_letter_recorded',\n\n    $5,\n    $6,\n\n    $7,\n    NULL,\n\n    $8,\n    'error_escalation',\n\n    $9,\n    $10,\n\n    $11,\n    NULL,\n    NULL,\n    $12,\n\n    $13,\n    $14,\n\n    $15,\n    $16,\n\n    $17,\n    'escalated',\n\n    $18,\n\n    $19::jsonb,\n    $20::jsonb,\n    $21::jsonb\n)\n\nON CONFLICT (idempotency_key)\nDO NOTHING\n\nRETURNING\n    error_event_id,\n    incident_id,\n    idempotency_key,\n\n    event_type,\n    event_status,\n    workflow_stage,\n\n    workflow_name,\n    execution_id,\n\n    attempt,\n    severity,\n    retryable,\n\n    recovery_strategy,\n    incident_status,\n\n    event_timestamp;",
+        "options": {
+          "queryReplacement": "={{\n[\n  $json.incident_id,\n\n  'ESC-' +\n    $json.incident_id +\n    '-DLQ-' +\n    $json.dead_letter_id,\n\n  $json.request_id ?? null,\n\n  $json.correlation_id ?? null,\n\n  $json.workflow_name,\n\n  $json.workflow_id ?? null,\n\n  $json.execution_id,\n\n  $json.node_name ?? null,\n\n  $json.channel ?? null,\n\n  $json.environment ??\n    'development',\n\n  $json.error_type,\n\n  $json.error_message,\n\n  $json.http_status ?? null,\n\n  Number(\n    $json.attempt ?? 1\n  ),\n\n  $json.severity,\n\n  $json.retryable ?? false,\n\n  $json.recovery_strategy,\n\n  $json.escalation_reason,\n\n  JSON.stringify({\n    source_error_event_id:\n      $json.source_error_event_id,\n\n    dead_letter_id:\n      $json.dead_letter_id,\n\n    dead_letter_status:\n      $json.dead_letter_status,\n\n    dead_lettered_at:\n      $json.dead_lettered_at\n  }),\n\n  JSON.stringify({\n    escalation_reason:\n      $json.escalation_reason,\n\n    alert_channel:\n      $json.alert_channel,\n\n    alert_status:\n      $json.alert_status,\n\n    alert_reference:\n      $json.alert_reference ?? {}\n  }),\n\n  JSON.stringify(\n    $json.payload_reference ?? {}\n  )\n]\n}}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        2688,
+        -96
+      ],
+      "id": "5403c0e0-b251-489e-8119-2bcc3385e51f",
+      "name": "SYS-016 | Audit Escalation Complete",
+      "notes": "COMPONENT ID\nSYS-016\n\nNODE NAME\nSYS | Audit Escalation Complete\n\nNODE TYPE\nPostgres — Execute Query\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\n\nPURPOSE\nCreates the final append-only audit event after an incident\nhas been escalated and persisted to the dead-letter queue.\n\nRESPONSIBILITY\nRecords the terminal governed outcome of an unrecovered\nincident.\n\nLinks the escalation audit event to the incident,\ndead-letter record, source error event, terminal execution,\nattempt count, alert result, and escalation reason.\n\nAUTHORIZED INPUT\ndead_letter_id\nincident_id\nsource_error_event_id\nexecution_id\nerror_type\nseverity\nretryable\nattempt\nrecovery_strategy\nescalation_reason\nalert_status\npayload_reference\n\nAUDIT CONTRACT\nevent_type = incident_escalated\n\nevent_status = recorded\n\nworkflow_stage = dead_letter_recorded\n\nincident_status = escalated\n\nOne deterministic escalation audit event is permitted per\nincident and dead-letter record.\n\nSECURITY BOUNDARY\nUses PG | Control RW.\n\nWrites only to audit.error_events.\n\nDoes not update prior workflow_error events.\n\nDoes not modify reporting facts.\n\nDoes not retry executions.\n\nDoes not send notifications.\n\nOnly safe references and bounded escalation metadata are\npersisted.\n\nOUTPUT\nerror_event_id\nincident_id\nevent_type\nevent_status\nworkflow_stage\nexecution_id\nattempt\nseverity\nretryable\nrecovery_strategy\nincident_status\nevent_timestamp\n\nNO AI\nNO REPORTING SQL\nNO EXTERNAL API CALL\nNO RETRY EXECUTION\n\nSTATUS\n🟡 In Progress — final escalation audit configured and\nawaiting production verification."
+    },
+    {
+      "parameters": {
+        "jsCode": "const REDACTED = '[REDACTED]';\n\nfunction redactSensitive(value) {\n  if (value === null || value === undefined) {\n    return '';\n  }\n\n  let text = String(value);\n\n  // Authorization headers\n  text = text.replace(\n    /\\b(authorization\\s*[:=]\\s*)(bearer|basic)\\s+[A-Za-z0-9\\-._~+/]+=*/gi,\n    '$1$2 [REDACTED]'\n  );\n\n  // Common secret-bearing key/value patterns\n  text = text.replace(\n    /\\b(api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|token|password|passwd|pwd|secret|client[_-]?secret)\\b\\s*[:=]\\s*([\"']?)[^\\s,;}\"']+\\2/gi,\n    '$1=[REDACTED]'\n  );\n\n  // Credentials embedded inside URLs:\n  // credential-bearing database URL example\n  // credential-bearing HTTP URL example\n  text = text.replace(\n    /([a-z][a-z0-9+.-]*:\\/\\/[^:\\s/@]+:)[^@\\s/]+(@)/gi,\n    '$1[REDACTED]$2'\n  );\n\n  // JWT-like tokens\n  text = text.replace(\n    /\\beyJ[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\.[A-Za-z0-9_-]{10,}\\b/g,\n    '[REDACTED_JWT]'\n  );\n\n  // Common provider token formats\n  text = text.replace(\n    /\\b(sk-[A-Za-z0-9_-]{12,}|gsk_[A-Za-z0-9_-]{12,}|xox[baprs]-[A-Za-z0-9-]{10,})\\b/g,\n    '[REDACTED_TOKEN]'\n  );\n\n  // Bound outbound diagnostic size.\n  if (text.length > 1500) {\n    text = text.slice(0, 1500) + '…[TRUNCATED]';\n  }\n\n  return text;\n}\n\nconst rawErrorMessage =\n  $json.error_message ??\n  $json.error_context?.error_message ??\n  '';\n\nconst rawEscalationReason =\n  $json.escalation?.reason ??\n  'Automatic recovery exhausted';\n\nreturn {\n  json: {\n    incident_id:\n      $json.incident_id ??\n      $json.incident?.incident_id ??\n      null,\n\n    request_id:\n      $json.request_id ??\n      null,\n\n    correlation_id:\n      $json.correlation_id ??\n      null,\n\n    workflow_name:\n      $json.workflow_name ??\n      $json.error_context?.workflow_name ??\n      'unknown',\n\n    workflow_id:\n      $json.workflow_id ??\n      null,\n\n    execution_id:\n      $json.execution_id ??\n      $json.error_context?.execution_id ??\n      'unknown',\n\n    node_name:\n      $json.node_name ??\n      $json.error_context?.node_name ??\n      'unknown',\n\n    environment:\n      $json.environment ??\n      'unknown',\n\n    severity:\n      $json.severity ??\n      $json.error_classification?.severity ??\n      'unknown',\n\n    error_type:\n      $json.error_type ??\n      $json.error_classification?.error_type ??\n      'unknown',\n\n    error_code:\n      $json.error_code ??\n      null,\n\n    http_status:\n      $json.http_status ??\n      null,\n\n    attempt:\n      $json.attempt ??\n      $json.incident?.attempt ??\n      0,\n\n    retryable:\n      $json.retryable ??\n      false,\n\n    safe_escalation_reason:\n      redactSensitive(rawEscalationReason) ||\n      'Automatic recovery exhausted',\n\n    safe_error_message:\n      redactSensitive(rawErrorMessage) ||\n      'Error details unavailable'\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        0
+      ],
+      "id": "1ac2f28b-2357-4b13-8eb7-f21489f4c073",
+      "name": "SYS-012A | SYS | Redact Escalation Payload",
+      "notes": "COMPONENT ID\nSYS-012A\n\nNODE NAME\nSYS | Redact Escalation Payload\n\nNODE TYPE\nCode — JavaScript\n\nPHASE\nPhase 8 — Error Handling + Retries + Fallbacks\nPhase 9 — Security + Audit + Testing\n\nPURPOSE\nCreate a deterministic, Slack-safe escalation payload before incident information crosses the external messaging boundary.\n\nRESPONSIBILITY\nAccept the prepared internal escalation event from SYS-012.\n\nRedact password-like values, API keys, access tokens, authorization values, embedded URL credentials, JWT-like values, and recognized provider token formats from Slack-bound diagnostic text.\n\nBound the size of outbound diagnostic error text.\n\nCreate a strict allowlisted escalation payload containing only fields required by the Slack alert.\n\nPrevent raw error_message and error_context structures from being passed directly into the Slack delivery node.\n\nAUTHORIZED INPUT\nPrepared escalation event from:\nSYS-012 | SYS | Prepare Escalation\n\nExpected context may include:\nincident_id\nrequest_id\ncorrelation_id\nworkflow_name\nworkflow_id\nexecution_id\nnode_name\nenvironment\nseverity\nerror_type\nerror_code\nerror_message\nhttp_status\nattempt\nretryable\nescalation.reason\n\nREDACTION CONTRACT\nRedaction is deterministic.\n\nAI must never perform secret redaction.\n\nKnown secret-bearing patterns are replaced before external delivery.\n\nSlack-bound diagnostic text must use:\nsafe_escalation_reason\nsafe_error_message\n\nThe raw error_message must not be exposed in the outbound payload.\n\nSECURITY BOUNDARY\nThis node is the final data-loss-prevention boundary before escalation information is sent to Slack.\n\nInternal audit evidence may retain diagnostic error details according to the audit architecture.\n\nExternal Slack delivery receives only the allowlisted and sanitized escalation payload.\n\nRedaction does not alter request governance, retry decisions, incident classification, database authority, or audit authority.\n\nOUTPUT\nSlack-safe escalation payload containing:\nincident_id\nrequest_id\ncorrelation_id\nworkflow_name\nworkflow_id\nexecution_id\nnode_name\nenvironment\nseverity\nerror_type\nerror_code\nhttp_status\nattempt\nretryable\nsafe_escalation_reason\nsafe_error_message\n\nNO AI\nNO SQL\nNO DATABASE READ\nNO DATABASE WRITE\nNO CREDENTIAL ACCESS\nNO RAW ERROR DELIVERY TO SLACK\n\nSTATUS\nSTATUS\nPhase 9 deterministic Slack redaction hardening verified\n\nProduction-triggered controlled failure test passed\n\nPassword, API-key, bearer-token, and database-password test values were redacted before Slack delivery\n\nSlack escalation delivery succeeded while preserving required incident context"
+    }
+  ],
+  "connections": {
+    "SYS-001 | SYS | Workflow Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "SYS-002 | SYS | Normalize Workflow Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-002 | SYS | Normalize Workflow Error": {
+      "main": [
+        [
+          {
+            "node": "SYS-003 | SYS | Create Incident ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-003 | SYS | Create Incident ID": {
+      "main": [
+        [
+          {
+            "node": "SYS-004 | SYS | Classify Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-004 | SYS | Classify Error": {
+      "main": [
+        [
+          {
+            "node": "SYS-005 | SYS | Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-005 | SYS | Log Error": {
+      "main": [
+        [
+          {
+            "node": "SYS-006 | SYS | Is Recoverable?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-006 | SYS | Is Recoverable?": {
+      "main": [
+        [
+          {
+            "node": "SYS-007 | SYS | Retry Budget Available?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SYS-012 | SYS | Prepare Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-007 | SYS | Retry Budget Available?": {
+      "main": [
+        [
+          {
+            "node": "SYS-008 | SYS | Retry Backoff",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "SYS-012 | SYS | Prepare Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-008 | SYS | Retry Backoff": {
+      "main": [
+        [
+          {
+            "node": "SYS-009 | SYS | Retry Failed Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-009 | SYS | Retry Failed Execution": {
+      "main": [
+        [
+          {
+            "node": "SYS-010 | SYS | Validate Retry Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-010 | SYS | Validate Retry Dispatch": {
+      "main": [
+        [
+          {
+            "node": "SYS-011 | SYS | Retry Dispatched?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-011 | SYS | Retry Dispatched?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "SYS-012 | SYS | Prepare Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-012 | SYS | Prepare Escalation": {
+      "main": [
+        [
+          {
+            "node": "SYS-012A | SYS | Redact Escalation Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-013 | SYS | Send Escalation Alert": {
+      "main": [
+        [
+          {
+            "node": "SYS-014 | SYS | Normalize Alert Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-014 | SYS | Normalize Alert Result": {
+      "main": [
+        [
+          {
+            "node": "SYS-015 | SYS | Write Dead Letter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-015 | SYS | Write Dead Letter": {
+      "main": [
+        [
+          {
+            "node": "SYS-016 | Audit Escalation Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SYS-012A | SYS | Redact Escalation Payload": {
+      "main": [
+        [
+          {
+            "node": "SYS-013 | SYS | Send Escalation Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "nodeGroups": [],
+  "tags": []
+}
