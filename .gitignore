@@ -1,0 +1,38 @@
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+api-secret
+*api-secret*
+*.token
+
+# n8n / local runtime
+workflows/raw/
+.n8n/
+n8n-data/
+*.log
+
+# Local database / exports
+revint-powerbi-data.csv
+*.dump
+*.sql.gz
+
+# Power BI local file - review separately before publishing
+*.pbix
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
