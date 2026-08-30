@@ -94,6 +94,18 @@ Result           Alert
 | Audit logging | PostgreSQL |
 | Error management | Centralized n8n error workflow |
 
+## Sanitized n8n workflow exports
+
+Portfolio-safe versions of the three core n8n workflows are included in the repository:
+
+- [REVINT-01 — Manager Request Orchestrator](workflows/sanitized-workflow-exports/REVINT-01.sanitized.json)
+- [REVINT-06 — Manager Form Gateway](workflows/sanitized-workflow-exports/REVINT-06.sanitized.json)
+- [REVINT-SYS-01 — Error Handler](workflows/sanitized-workflow-exports/REVINT-SYS-01.sanitized.json)
+
+See the [workflow documentation](workflows/README.md) for responsibilities, security boundaries, and publication notes.
+
+> These are sanitized portfolio exports. Credentials, secrets, instance metadata, and private runtime configuration are intentionally excluded.
+
 ## Governed query execution
 
 The AI does **not** receive permission to generate and execute arbitrary SQL.
