@@ -1,0 +1,103 @@
+name: ${COMPOSE_PROJECT_NAME:-revint-agent}
+
+services:
+  n8n-db:
+    image: docker.io/library/postgres:${POSTGRES_VERSION:-16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${N8N_DB_NAME:-n8n}
+      POSTGRES_USER: ${N8N_DB_USER:-n8n}
+      POSTGRES_PASSWORD: ${N8N_DB_PASSWORD:?Set N8N_DB_PASSWORD in deploy/.env}
+    volumes:
+      - n8n_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${N8N_DB_USER:-n8n} -d ${N8N_DB_NAME:-n8n}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - agent_private
+
+  reporting-db:
+    image: docker.io/library/postgres:${POSTGRES_VERSION:-16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${REPORTING_DB_NAME:-revenue_reporting}
+      POSTGRES_USER: ${REPORTING_DB_ADMIN_USER:-revint_admin}
+      POSTGRES_PASSWORD: ${REPORTING_DB_ADMIN_PASSWORD:?Set REPORTING_DB_ADMIN_PASSWORD in deploy/.env}
+    volumes:
+      - reporting_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${REPORTING_DB_ADMIN_USER:-revint_admin} -d ${REPORTING_DB_NAME:-revenue_reporting}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - agent_private
+
+  n8n:
+    image: docker.io/n8nio/n8n:${N8N_VERSION:-2.35.7}
+    restart: unless-stopped
+    depends_on:
+      n8n-db:
+        condition: service_healthy
+      reporting-db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: n8n-db
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${N8N_DB_NAME:-n8n}
+      DB_POSTGRESDB_USER: ${N8N_DB_USER:-n8n}
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD:?Set N8N_DB_PASSWORD in deploy/.env}
+
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in deploy/.env}
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-http://localhost:5678/}
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-http://localhost:5678/}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Etc/UTC}
+      TZ: ${TZ:-Etc/UTC}
+
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      N8N_RUNNERS_ENABLED: "true"
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      N8N_VERSION_NOTIFICATIONS_ENABLED: "false"
+
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: ${EXECUTIONS_DATA_MAX_AGE:-336}
+
+      REPORTING_DB_HOST: reporting-db
+      REPORTING_DB_PORT: 5432
+      REPORTING_DB_NAME: ${REPORTING_DB_NAME:-revenue_reporting}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:5678/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - agent_private
+      - agent_egress
+
+volumes:
+  n8n_data:
+  n8n_db_data:
+  reporting_db_data:
+
+networks:
+  agent_private:
+    internal: true
+  agent_egress:
