@@ -1,10 +1,12 @@
 # Client Configuration
 
-Client-specific runtime values belong in the private `deploy/.env` file and the governed PostgreSQL configuration tables.
+Client-specific values must stay outside reusable workflow logic.
 
-Do not hard-code client names, timezones, currencies, fiscal calendars, pipeline thresholds, credentials, CRM object IDs, or API tokens into reusable n8n workflow templates.
+## Business configuration
 
-Stage 2 stores these business-level settings in `governance.business_config`:
+Private runtime values belong in `deploy/.env` and governed PostgreSQL configuration tables.
+
+Stage 2 stores business-level settings in `governance.business_config`:
 
 - company name
 - timezone
@@ -13,6 +15,28 @@ Stage 2 stores these business-level settings in `governance.business_config`:
 - stale-deal threshold
 - minimum pipeline-coverage threshold
 
-KPI definitions are versioned separately in `governance.kpi_catalog`.
+KPI definitions are versioned in `governance.kpi_catalog`.
 
-Permissions are represented in `governance.role_policy` and will be connected to external identity/RBAC in a later stage.
+Permissions are represented in `governance.role_policy` and will connect to external identity/RBAC in a later stage.
+
+## Connector configuration
+
+Stage 3 stores non-secret connector metadata in:
+
+- `governance.connector_registry`
+- `governance.connector_field_mapping`
+- `governance.connector_value_mapping`
+
+Use `config/connectors.example.json` as the public template.
+
+For a real client, create `config/connectors.local.json`. That file is ignored by Git and can be applied with:
+
+```bash
+bash scripts/apply-connector-config.sh
+```
+
+Connector configuration may contain source field names, canonical field mappings, deterministic transform keys, and stage-value mappings.
+
+Do not place client names, credentials, CRM object secrets, OAuth tokens, API keys, passwords, private keys, or n8n credential payloads into reusable workflow templates or connector configuration files.
+
+Actual connector credentials must remain in the private credential/environment layer.
