@@ -1,0 +1,314 @@
+[
+  {
+    "id": "REVINTV2AGENTCORE01",
+    "name": "REVINT-V2-AGENT-01 | Governed Report Agent Core",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "revint/v2/report",
+          "authentication": "headerAuth",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "id": "fc70f107-362b-4f77-a84c-d2c3a08573d1",
+        "name": "INT | Authenticated Report Request",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REVINTREPORTHEADER001",
+            "name": "REVINT | Report Header Auth"
+          }
+        },
+        "webhookId": "5d96a8b3-5db2-478d-bb12-c4fea6b39f47"
+      },
+      {
+        "parameters": {
+          "jsCode": "const raw = $json;\nconst body = raw.body && typeof raw.body === 'object' && !Array.isArray(raw.body)\n  ? raw.body\n  : raw;\n\nconst now = new Date();\nconst suffix = Math.random().toString(36).slice(2, 10).toUpperCase();\nconst requestId = `AGENT-${now.getTime()}-${suffix}`;\nconst correlationId = `CORR-${now.getTime()}-${suffix}`;\n\nconst errors = [];\nconst clarifications = [];\n\nconst principalKey = typeof body.principal_key === 'string'\n  ? body.principal_key.trim()\n  : '';\n\nif (!principalKey || principalKey.length > 128) {\n  errors.push({\n    code: 'PRINCIPAL_KEY_REQUIRED',\n    message: 'A valid principal_key is required.'\n  });\n}\n\nconst allowedKpis = new Set([\n  'closed_won_revenue',\n  'open_pipeline',\n  'closed_won_deals',\n  'win_rate'\n]);\n\nconst allowedPeriods = new Set([\n  'today','yesterday',\n  'this_week','last_week',\n  'this_month','last_month',\n  'this_quarter','last_quarter',\n  'this_year','last_year'\n]);\n\nconst allowedModes = new Set([\n  'metric_report',\n  'trend_report',\n  'comparison_report'\n]);\n\nconst allowedFilterFields = new Set([\n  'sales_rep',\n  'lead_source',\n  'deal_stage'\n]);\n\nfunction normalizeFilters(input) {\n  if (input === undefined || input === null) return {};\n  if (typeof input !== 'object' || Array.isArray(input)) {\n    errors.push({code:'FILTERS_INVALID', message:'filters must be an object.'});\n    return {};\n  }\n\n  const output = {};\n  for (const [field, rawValue] of Object.entries(input)) {\n    if (!allowedFilterFields.has(field)) {\n      errors.push({\n        code:'FILTER_FIELD_NOT_SUPPORTED',\n        message:`Unsupported filter field: ${field}`\n      });\n      continue;\n    }\n\n    const values = Array.isArray(rawValue) ? rawValue : [rawValue];\n    if (\n      values.length === 0 ||\n      values.length > 50 ||\n      values.some(v => typeof v !== 'string' || !v.trim() || v.trim().length > 200)\n    ) {\n      errors.push({\n        code:'FILTER_VALUE_INVALID',\n        message:`Invalid filter value for ${field}.`\n      });\n      continue;\n    }\n\n    output[field] = [...new Set(values.map(v => v.trim()))];\n  }\n  return output;\n}\n\nlet intent = null;\nlet interpreterType = null;\n\nif (\n  body.structured_intent &&\n  typeof body.structured_intent === 'object' &&\n  !Array.isArray(body.structured_intent)\n) {\n  interpreterType = 'structured_intent_v1';\n  const supplied = body.structured_intent;\n\n  const kpiKey = typeof supplied.kpi_key === 'string' ? supplied.kpi_key.trim() : '';\n  const periodKey = typeof supplied.period_key === 'string' ? supplied.period_key.trim() : '';\n  const mode = typeof supplied.mode === 'string' ? supplied.mode.trim() : 'metric_report';\n  const dimensions = Array.isArray(supplied.dimensions) ? supplied.dimensions : [];\n\n  if (!allowedKpis.has(kpiKey)) {\n    clarifications.push({\n      code:'KPI_CLARIFICATION_REQUIRED',\n      question:'Which supported KPI do you want: closed won revenue, open pipeline, closed won deals, or win rate?'\n    });\n  }\n\n  if (!allowedPeriods.has(periodKey)) {\n    clarifications.push({\n      code:'PERIOD_CLARIFICATION_REQUIRED',\n      question:'Which reporting period should I use (for example this month, last month, this quarter, or last quarter)?'\n    });\n  }\n\n  if (!allowedModes.has(mode)) {\n    clarifications.push({\n      code:'REPORT_MODE_CLARIFICATION_REQUIRED',\n      question:'Should this be a metric report, trend report, or comparison report?'\n    });\n  }\n\n  if (dimensions.length > 0) {\n    clarifications.push({\n      code:'BREAKDOWN_NOT_ENABLED',\n      question:'This agent core currently returns governed scalar metrics. Please remove the breakdown dimension for this request.'\n    });\n  }\n\n  intent = {\n    kpi_key: kpiKey,\n    period_key: periodKey,\n    mode,\n    filters: normalizeFilters(supplied.filters),\n  };\n} else {\n  interpreterType = 'deterministic_nl_v1';\n  const question = typeof body.question === 'string' ? body.question.trim() : '';\n\n  if (!question || question.length > 1000) {\n    errors.push({\n      code:'QUESTION_REQUIRED',\n      message:'A report question of at most 1000 characters is required.'\n    });\n  }\n\n  const q = question.toLowerCase().replace(/\\s+/g, ' ');\n\n  if (/\\bby\\s+(sales\\s+rep|rep|lead\\s+source|stage)\\b/.test(q)) {\n    clarifications.push({\n      code:'BREAKDOWN_NOT_ENABLED',\n      question:'This agent core currently returns governed scalar metrics. Please ask for the headline KPI without a breakdown.'\n    });\n  }\n\n  const metricMatches = [];\n  if (/\\b(closed[\\s-]*won revenue|won revenue|revenue won)\\b/.test(q)) {\n    metricMatches.push('closed_won_revenue');\n  }\n  if (/\\b(open pipeline|pipeline value)\\b/.test(q) || /\\bpipeline\\b/.test(q)) {\n    metricMatches.push('open_pipeline');\n  }\n  if (/\\b(closed[\\s-]*won deals?|won deals?|deals? won)\\b/.test(q)) {\n    metricMatches.push('closed_won_deals');\n  }\n  if (/\\bwin rate\\b/.test(q)) {\n    metricMatches.push('win_rate');\n  }\n\n  const uniqueMetrics = [...new Set(metricMatches)];\n  if (uniqueMetrics.length !== 1) {\n    clarifications.push({\n      code:'KPI_CLARIFICATION_REQUIRED',\n      question:'Which supported KPI do you want: closed won revenue, open pipeline, closed won deals, or win rate?'\n    });\n  }\n\n  const periodPatterns = [\n    ['last_quarter', /\\blast quarter\\b/],\n    ['this_quarter', /\\bthis quarter\\b/],\n    ['last_month', /\\blast month\\b/],\n    ['this_month', /\\bthis month\\b/],\n    ['last_week', /\\blast week\\b/],\n    ['this_week', /\\bthis week\\b/],\n    ['last_year', /\\blast year\\b/],\n    ['this_year', /\\bthis year\\b/],\n    ['yesterday', /\\byesterday\\b/],\n    ['today', /\\btoday\\b/],\n  ];\n\n  const periodMatches = periodPatterns\n    .filter(([,pattern]) => pattern.test(q))\n    .map(([key]) => key);\n\n  if (periodMatches.length !== 1) {\n    clarifications.push({\n      code:'PERIOD_CLARIFICATION_REQUIRED',\n      question:'Which reporting period should I use (for example this month, last month, this quarter, or last quarter)?'\n    });\n  }\n\n  let mode = 'metric_report';\n  if (/\\b(compare|comparison|compared|versus|vs\\.?)\\b/.test(q)) {\n    mode = 'comparison_report';\n  } else if (/\\b(trend|change|changing|movement|moving)\\b/.test(q)) {\n    mode = 'trend_report';\n  }\n\n  intent = {\n    kpi_key: uniqueMetrics.length === 1 ? uniqueMetrics[0] : null,\n    period_key: periodMatches.length === 1 ? periodMatches[0] : null,\n    mode,\n    filters: {},\n  };\n}\n\nreturn {\n  request_id: requestId,\n  correlation_id: correlationId,\n  principal_key: principalKey,\n  question: typeof body.question === 'string' ? body.question.trim() : null,\n  interpreter_type: interpreterType,\n  structured_intent: intent,\n  validation: {\n    is_valid: errors.length === 0,\n    errors,\n    clarification_required: clarifications.length > 0,\n    clarifications,\n    validated_at: now.toISOString(),\n  },\n  should_execute: errors.length === 0 && clarifications.length === 0,\n  workflow_stage: errors.length === 0 && clarifications.length === 0\n    ? 'agent_intent_ready'\n    : 'agent_clarification_required',\n};"
+        },
+        "id": "5380b2f4-6a6e-4201-9b25-c1a15401cedc",
+        "name": "CTX | Interpret Report Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          260,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "d69c209b-af62-445b-b90f-af1b61ad548e",
+                "leftValue": "={{ $json.should_execute }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "46ec48f3-befc-43b9-b3ea-f2dade56b78f",
+        "name": "VAL | Intent Ready?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          520,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.execute_agent_metric_request($1,$2,$3,$4,$5::jsonb) AS agent_result;",
+          "options": {
+            "queryReplacement": "={{ [ $json.principal_key, $json.structured_intent.kpi_key, $json.structured_intent.period_key, $json.structured_intent.mode, JSON.stringify($json.structured_intent.filters ?? {}) ] }}"
+          }
+        },
+        "id": "aa022c56-65ad-43ee-ba18-7ed22f32b97a",
+        "name": "DB | Execute Governed Metric",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          780,
+          -120
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx = $('CTX | Interpret Report Request').item.json;\nlet result = $json.agent_result;\n\nif (typeof result === 'string') {\n  try { result = JSON.parse(result); } catch { result = null; }\n}\n\nif (!result || result.status !== 'approved') {\n  const internalReason = result?.reason ?? 'REPORT_NOT_AUTHORIZED';\n  return {\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    http_status: 403,\n    response_body: {\n      status: 'rejected',\n      request_id: ctx.request_id,\n      correlation_id: ctx.correlation_id,\n      error: {\n        code: 'REPORT_NOT_AUTHORIZED',\n        message: 'The requested report could not be authorized for execution.'\n      }\n    },\n    audit_event: {\n      event_type: 'report_rejected',\n      stage: 'agent_core',\n      actor: 'n8n_agent_core',\n      payload: {\n        principal_key: ctx.principal_key,\n        kpi_key: ctx.structured_intent?.kpi_key ?? null,\n        period_key: ctx.structured_intent?.period_key ?? null,\n        mode: ctx.structured_intent?.mode ?? null,\n        reason: internalReason,\n        interpreter_type: ctx.interpreter_type\n      }\n    }\n  };\n}\n\nreturn {\n  request_id: ctx.request_id,\n  correlation_id: ctx.correlation_id,\n  http_status: 200,\n  response_body: {\n    status: 'success',\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    report: {\n      kpi_key: result.kpi_key,\n      mode: result.mode,\n      unit: result.unit,\n      currency_code: result.currency_code,\n      reporting_timezone: result.reporting_timezone,\n      current_period: result.current_period,\n      previous_period: result.previous_period,\n      analysis: result.analysis\n    }\n  },\n  audit_event: {\n    event_type: 'report_completed',\n    stage: 'agent_core',\n    actor: 'n8n_agent_core',\n    payload: {\n      principal_key: ctx.principal_key,\n      kpi_key: result.kpi_key,\n      period_key: ctx.structured_intent?.period_key ?? null,\n      mode: result.mode,\n      data_scope: result.data_scope,\n      interpreter_type: ctx.interpreter_type,\n      status: 'approved'\n    }\n  }\n};"
+        },
+        "id": "df64a15a-1ebf-4219-bbfe-e25395244cea",
+        "name": "REP | Build Report Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1040,
+          -120
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO audit.agent_events (event_id,request_id,correlation_id,event_type,stage,actor,payload) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb);",
+          "options": {
+            "queryReplacement": "={{ [ 'EVT-AGENT-' + $json.request_id, $json.request_id, $json.correlation_id, $json.audit_event.event_type, $json.audit_event.stage, $json.audit_event.actor, JSON.stringify($json.audit_event.payload) ] }}"
+          }
+        },
+        "id": "dafd5d85-4abe-4e08-8afc-308215d4be5c",
+        "name": "AUD | Log Report Result",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1300,
+          -120
+        ],
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $('REP | Build Report Response').item.json.response_body }}",
+          "options": {
+            "responseCode": "={{ $('REP | Build Report Response').item.json.http_status }}"
+          }
+        },
+        "id": "01ce8ff2-d9d1-49e0-ac50-4f9395e9c8a1",
+        "name": "DEL | Return Report Response",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1560,
+          -120
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const ctx = $json;\nconst clarification = Array.isArray(ctx.validation?.clarifications)\n  ? ctx.validation.clarifications\n  : [];\nconst validationErrors = Array.isArray(ctx.validation?.errors)\n  ? ctx.validation.errors\n  : [];\n\nconst questions = clarification.map(item => ({\n  code: item.code,\n  question: item.question\n}));\n\nif (questions.length === 0 && validationErrors.length > 0) {\n  questions.push({\n    code: 'REQUEST_CLARIFICATION_REQUIRED',\n    question: 'Please provide a valid principal and a supported report question.'\n  });\n}\n\nreturn {\n  request_id: ctx.request_id,\n  correlation_id: ctx.correlation_id,\n  http_status: 422,\n  response_body: {\n    status: 'clarification_required',\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    questions\n  },\n  audit_event: {\n    event_type: 'report_clarification_required',\n    stage: 'agent_core',\n    actor: 'n8n_agent_core',\n    payload: {\n      principal_key: ctx.principal_key || null,\n      interpreter_type: ctx.interpreter_type,\n      clarification_codes: questions.map(q => q.code),\n      validation_error_codes: validationErrors.map(e => e.code)\n    }\n  }\n};"
+        },
+        "id": "8da8ca9c-042b-4580-b6e4-4f708db20e2e",
+        "name": "REP | Build Clarification Response",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          780,
+          160
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO audit.agent_events (event_id,request_id,correlation_id,event_type,stage,actor,payload) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb);",
+          "options": {
+            "queryReplacement": "={{ [ 'EVT-AGENT-' + $json.request_id, $json.request_id, $json.correlation_id, $json.audit_event.event_type, $json.audit_event.stage, $json.audit_event.actor, JSON.stringify($json.audit_event.payload) ] }}"
+          }
+        },
+        "id": "28f5c57c-e08b-48cf-8d4c-d4b5f2f4a721",
+        "name": "AUD | Log Clarification",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1040,
+          160
+        ],
+        "alwaysOutputData": true,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $('REP | Build Clarification Response').item.json.response_body }}",
+          "options": {
+            "responseCode": "={{ $('REP | Build Clarification Response').item.json.http_status }}"
+          }
+        },
+        "id": "c5e0e474-9d23-432f-92fd-383ae12b177d",
+        "name": "DEL | Return Clarification",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1300,
+          160
+        ]
+      }
+    ],
+    "connections": {
+      "INT | Authenticated Report Request": {
+        "main": [
+          [
+            {
+              "node": "CTX | Interpret Report Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Interpret Report Request": {
+        "main": [
+          [
+            {
+              "node": "VAL | Intent Ready?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Intent Ready?": {
+        "main": [
+          [
+            {
+              "node": "DB | Execute Governed Metric",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "REP | Build Clarification Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Execute Governed Metric": {
+        "main": [
+          [
+            {
+              "node": "REP | Build Report Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Build Report Response": {
+        "main": [
+          [
+            {
+              "node": "AUD | Log Report Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AUD | Log Report Result": {
+        "main": [
+          [
+            {
+              "node": "DEL | Return Report Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Build Clarification Response": {
+        "main": [
+          [
+            {
+              "node": "AUD | Log Clarification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AUD | Log Clarification": {
+        "main": [
+          [
+            {
+              "node": "DEL | Return Clarification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false
+    },
+    "pinData": {},
+    "tags": []
+  }
+]

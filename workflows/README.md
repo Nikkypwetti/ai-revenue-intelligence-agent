@@ -1,8 +1,24 @@
-# Sanitized n8n Workflow Exports
+# n8n Workflows
 
-This directory contains portfolio-safe exports of the core workflows used by the AI Revenue Intelligence & Reporting Agent.
+This directory contains deployable Agent v2 runtime templates and portfolio-safe sanitized exports from the earlier Revenue Intelligence implementation.
 
-## Published workflows
+## Agent v2 runtime templates
+
+### REVINT-V2-REST-01 — Authenticated Deal Ingestion
+
+`runtime-templates/REVINT-V2-REST-01.json`
+
+The locally verified Stage 4 ingestion adapter that normalizes authenticated deal payloads into the canonical reporting contract.
+
+### REVINT-V2-AGENT-01 — Governed Report Agent Core
+
+`runtime-templates/REVINT-V2-AGENT-01.json`
+
+The locally verified report execution core. It accepts authenticated report requests, interprets the four currently governed KPIs through a bounded deterministic fallback or a structured-intent contract, calls the PostgreSQL authorization/execution gateway, returns safe clarification or report responses, and writes bounded audit events.
+
+A live LLM model credential is intentionally not embedded in this template. A future model adapter must produce the same structured-intent contract and remains downstream of the same deterministic authorization boundary.
+
+## Sanitized portfolio workflows
 
 ### REVINT-01 — Manager Request Orchestrator
 

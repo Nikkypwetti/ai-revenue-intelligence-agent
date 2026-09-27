@@ -7,7 +7,7 @@ A governed self-service revenue reporting system that turns manager questions in
 
 ## Agent v2 — deployable business edition
 
-Stages 1–3 are merged and locally verified. Stage 4 runtime integration and the authenticated REST ingestion adapter are also locally verified on the isolated Agent v2 deployment.
+Stages 1–4, the KPI semantic layer, and identity/permissions are merged and locally verified. The governed Agent execution core is also locally verified on the isolated Agent v2 deployment.
 
 **Stage 1** provides the reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
 
@@ -21,9 +21,11 @@ Stages 1–3 are merged and locally verified. Stage 4 runtime integration and th
 
 **Identity & permissions** extends the existing role-policy model with provider-neutral principals, departments, role assignments, row limits, and deterministic own/department/all-business data scopes. No real client users or departments are seeded.
 
-See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), and [identity/permissions documentation](docs/identity-permissions.md).
+**Agent execution core** adds authenticated report intake, bounded deterministic natural-language interpretation for the four governed KPIs, safe clarification, identity-aware KPI execution, approved filters, and current-versus-previous-period analysis. A live LLM/Groq interpreter is not configured in Agent v2 yet; when added, it must output the same structured-intent contract and cannot bypass deterministic authorization.
 
-> These stages are production-foundation work, not a claim of full production readiness. External CRM/billing adapters, HTTPS/public ingress, external authentication/SSO, backup/restore automation, monitoring, and upgrade/rollback controls remain later stages.
+See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), [identity/permissions documentation](docs/identity-permissions.md), and [Agent execution-core documentation](docs/agent-execution-core.md).
+
+> These stages are production-foundation work, not a claim of full production readiness. A live LLM intent adapter, external CRM/billing adapters, HTTPS/public ingress, external authentication/SSO, backup/restore automation, monitoring, and upgrade/rollback controls remain later stages.
 
 ## Business problem
 
