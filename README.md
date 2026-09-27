@@ -7,7 +7,7 @@ A governed self-service revenue reporting system that turns manager questions in
 
 ## Agent v2 — deployable business edition
 
-Stage 1 is merged and locally verified. Stage 2 is now being developed on the `agent-v2-stage2-client-security` branch.
+Stage 1 is merged and locally verified. Stage 2 client configuration and reporting-security controls are also locally verified on the `agent-v2-stage2-client-security` branch.
 
 **Stage 1** provides the reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
 
