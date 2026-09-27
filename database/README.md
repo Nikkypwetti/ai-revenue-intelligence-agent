@@ -8,6 +8,7 @@ This folder contains sanitized, portfolio-safe database artifacts for the deploy
 - `migrations/002_stage3_connector_contract.sql` — connector mapping metadata, canonical deal contract, controlled ingestion gateway, approved-query registry, and connector-ingestion role
 - `migrations/003_semantic_layer.sql` — governed dimensions, filters, date fields, formula metadata, normalized KPI policies, and deterministic semantic resolution
 - `migrations/004_identity_permissions.sql` — principals, departments, role assignments, semantic role validation, and deterministic data-scope authorization
+- `migrations/005_agent_execution_core.sql` — governed relative periods, identity-aware metric execution, approved runtime filters, and deterministic current/previous-period analysis
 
 ## Seeds
 
