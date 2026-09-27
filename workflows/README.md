@@ -18,6 +18,14 @@ The locally verified report execution core. It accepts authenticated report requ
 
 A live LLM model credential is intentionally not embedded in this template. A future model adapter must produce the same structured-intent contract and remains downstream of the same deterministic authorization boundary.
 
+### REVINT-V2-SCHEDULED-01 — Pipeline Intelligence
+
+`runtime-templates/REVINT-V2-SCHEDULED-01.json`
+
+The locally verified proactive pipeline workflow. It runs daily at 08:00 and weekly on Monday at 08:15 in the configured n8n timezone, generates a bounded pipeline-risk digest through the reporting-reader credential, and appends the result through the existing audit-writer credential.
+
+It detects stale open records, missing expected close dates, and material open-pipeline movement against the prior snapshot. External Slack/email delivery is intentionally not configured yet.
+
 ## Sanitized portfolio workflows
 
 ### REVINT-01 — Manager Request Orchestrator
