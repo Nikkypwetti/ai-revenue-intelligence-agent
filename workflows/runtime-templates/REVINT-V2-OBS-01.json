@@ -1,0 +1,135 @@
+[
+  {
+    "id": "REVINTV2OBS01",
+    "name": "REVINT-V2-OBS-01 | Runtime Observability",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 5
+              }
+            ]
+          }
+        },
+        "id": "obs1a8d2-6c4a-4d2d-8f66-71b0c5a90101",
+        "name": "INT | Five-Minute Heartbeat",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT observability.build_runtime_snapshot() AS snapshot;",
+          "options": {}
+        },
+        "id": "obs2a8d2-6c4a-4d2d-8f66-71b0c5a90102",
+        "name": "DB | Build Runtime Snapshot",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          260,
+          0
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const raw = $json.snapshot;\nconst snapshot = typeof raw === 'string' ? JSON.parse(raw) : raw;\nconst generatedAt = new Date(snapshot?.generated_at ?? Date.now());\nconst safeTime = Number.isNaN(generatedAt.getTime()) ? new Date() : generatedAt;\nconst bucketMs = Math.floor(safeTime.getTime() / 300000) * 300000;\nconst bucket = new Date(bucketMs)\n  .toISOString()\n  .slice(0, 16)\n  .replace(/[-:T]/g, '');\n\nreturn {\n  event_id: 'OBS-' + bucket,\n  snapshot\n};"
+        },
+        "id": "obs3a8d2-6c4a-4d2d-8f66-71b0c5a90103",
+        "name": "REP | Prepare Runtime Snapshot",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_reliable_audit_event(\n  $1,NULL,NULL,'runtime_health_snapshot','observability',\n  'n8n_observability',$2::jsonb,'observability'\n) AS audit_result;",
+          "options": {
+            "queryReplacement": "={{ [ $json.event_id, JSON.stringify($json.snapshot) ] }}"
+          }
+        },
+        "id": "obs4a8d2-6c4a-4d2d-8f66-71b0c5a90104",
+        "name": "AUD | Record Runtime Snapshot",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          780,
+          0
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "INT | Five-Minute Heartbeat": {
+        "main": [
+          [
+            {
+              "node": "DB | Build Runtime Snapshot",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Build Runtime Snapshot": {
+        "main": [
+          [
+            {
+              "node": "REP | Prepare Runtime Snapshot",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Prepare Runtime Snapshot": {
+        "main": [
+          [
+            {
+              "node": "AUD | Record Runtime Snapshot",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "pinData": {},
+    "tags": []
+  }
+]

@@ -11,6 +11,7 @@ This folder contains sanitized, portfolio-safe database artifacts for the deploy
 - `migrations/005_agent_execution_core.sql` — governed relative periods, identity-aware metric execution, approved runtime filters, and deterministic current/previous-period analysis
 - `migrations/006_scheduled_intelligence.sql` — governed proactive risk rules, previous-snapshot comparison, stale/open-data-quality checks, and bounded scheduled digest generation
 - `migrations/007_reliability_core.sql` — retry/circuit policies, circuit state, terminal failure classification, idempotent runtime failure logging, dead-letter persistence, and conflict-safe audit functions
+- `migrations/008_observability_core.sql` — governed component/runtime status, alert-ready operational views, snapshot history, runtime snapshot builder, and supporting indexes
 
 ## Seeds
 
@@ -20,6 +21,7 @@ This folder contains sanitized, portfolio-safe database artifacts for the deploy
 - `seeds/004_role_policies.sql` — reusable baseline revenue-admin, revenue-manager, and sales-rep permission policies; no real users or departments
 - `seeds/005_intelligence_rules.sql` — configurable proactive rules for stale deals, missing expected close dates, pipeline movement, and scheduled digests
 - `seeds/006_reliability_policies.sql` — bounded retry and circuit-breaker policies for REST ingestion, reporting, and Scheduled Intelligence
+- `seeds/007_observability_policy.sql` — Reliability policy registration for the five-minute runtime observability workflow
 
 The canonical Stage 3 reporting model is `reporting.deals`.
 

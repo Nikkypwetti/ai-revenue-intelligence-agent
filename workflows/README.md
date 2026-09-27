@@ -34,6 +34,14 @@ The locally verified Agent v2 terminal-failure workflow. The REST ingestion, rep
 
 It redacts and normalizes the terminal error, then records an idempotent runtime failure, dead-letter entry, and per-component circuit state through the existing Audit Writer credential. It does not automatically replay failed business workflows or require an n8n API key.
 
+### REVINT-V2-OBS-01 — Runtime Observability
+
+`runtime-templates/REVINT-V2-OBS-01.json`
+
+The locally verified five-minute monitoring workflow. It builds a bounded runtime snapshot from governed component, circuit, failure, and dead-letter status through Reporting RO, then persists the snapshot through the existing Audit Writer credential using deterministic five-minute event IDs.
+
+It uses bounded PostgreSQL retries and routes terminal failures through `REVINT-V2-SYS-01`. External notification delivery is intentionally not configured yet.
+
 ## Sanitized portfolio workflows
 
 ### REVINT-01 — Manager Request Orchestrator
