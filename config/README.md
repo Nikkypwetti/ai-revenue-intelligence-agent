@@ -17,7 +17,7 @@ Stage 2 stores business-level settings in `governance.business_config`:
 
 KPI definitions are versioned in `governance.kpi_catalog`.
 
-Permissions are represented in `governance.role_policy` and will connect to external identity/RBAC in a later stage.
+Permissions continue to use `governance.role_policy`. The identity/permissions layer now connects those policies to provider-neutral principals, departments, role assignments, and own/department/all-business data scopes. External authentication/SSO remains a later integration.
 
 ## Connector configuration
 

@@ -19,9 +19,11 @@ Stages 1–3 are merged and locally verified. Stage 4 runtime integration and th
 
 **KPI semantic-layer completion** preserves the existing four KPI definitions and query keys while adding explicit formula metadata, governed dimension/filter/date-field catalogues, normalized KPI policies, and deterministic semantic resolution.
 
-See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), and [KPI semantic-layer documentation](docs/semantic-layer.md).
+**Identity & permissions** extends the existing role-policy model with provider-neutral principals, departments, role assignments, row limits, and deterministic own/department/all-business data scopes. No real client users or departments are seeded.
 
-> These stages are production-foundation work, not a claim of full production readiness. External CRM/billing adapters, HTTPS/public ingress, external identity/RBAC, backup/restore automation, monitoring, and upgrade/rollback controls remain later stages.
+See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), and [identity/permissions documentation](docs/identity-permissions.md).
+
+> These stages are production-foundation work, not a claim of full production readiness. External CRM/billing adapters, HTTPS/public ingress, external authentication/SSO, backup/restore automation, monitoring, and upgrade/rollback controls remain later stages.
 
 ## Business problem
 
