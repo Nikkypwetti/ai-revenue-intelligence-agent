@@ -7,13 +7,15 @@ A governed self-service revenue reporting system that turns manager questions in
 
 ## Agent v2 — deployable business edition
 
-A production-oriented evolution is now being built on the `agent-v2-stage1-deployment` branch.
+Stage 1 is merged and locally verified. Stage 2 is now being developed on the `agent-v2-stage2-client-security` branch.
 
-**Stage 1** introduces a reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
+**Stage 1** provides the reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
 
-See [Stage 1 deployment documentation](docs/deployment-stage-1.md).
+**Stage 2** adds client-specific business configuration, a versioned KPI catalogue, and least-privilege reporting/audit database roles.
 
-> Stage 1 is infrastructure foundation work, not a claim of full production readiness. HTTPS, production identity/RBAC, client-specific connectors, backup/restore validation, monitoring, and upgrade/rollback controls remain later stages.
+See [Stage 1 deployment documentation](docs/deployment-stage-1.md) and [Stage 2 documentation](docs/deployment-stage-2.md).
+
+> These stages are production-foundation work, not a claim of full production readiness. HTTPS, external identity/RBAC, client-specific connectors, backup/restore validation, monitoring, and upgrade/rollback controls remain later stages.
 
 ## Business problem
 
