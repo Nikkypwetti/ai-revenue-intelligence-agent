@@ -9,6 +9,7 @@ This folder contains sanitized, portfolio-safe database artifacts for the deploy
 - `migrations/003_semantic_layer.sql` — governed dimensions, filters, date fields, formula metadata, normalized KPI policies, and deterministic semantic resolution
 - `migrations/004_identity_permissions.sql` — principals, departments, role assignments, semantic role validation, and deterministic data-scope authorization
 - `migrations/005_agent_execution_core.sql` — governed relative periods, identity-aware metric execution, approved runtime filters, and deterministic current/previous-period analysis
+- `migrations/006_scheduled_intelligence.sql` — governed proactive risk rules, previous-snapshot comparison, stale/open-data-quality checks, and bounded scheduled digest generation
 
 ## Seeds
 
@@ -16,6 +17,7 @@ This folder contains sanitized, portfolio-safe database artifacts for the deploy
 - `seeds/002_query_templates.sql` — deterministic templates for the four approved KPI query keys
 - `seeds/003_semantic_catalog.sql` — canonical semantic mappings and formula metadata for the existing governed KPIs
 - `seeds/004_role_policies.sql` — reusable baseline revenue-admin, revenue-manager, and sales-rep permission policies; no real users or departments
+- `seeds/005_intelligence_rules.sql` — configurable proactive rules for stale deals, missing expected close dates, pipeline movement, and scheduled digests
 
 The canonical Stage 3 reporting model is `reporting.deals`.
 
