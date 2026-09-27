@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "connectors": [
+    {
+      "connector_key": "hubspot_primary",
+      "connector_type": "hubspot",
+      "display_name": "HubSpot Deals",
+      "object_type": "deal",
+      "contract_version": 1,
+      "active": false,
+      "field_mappings": [
+        {"canonical_field":"deal_name","source_field":"dealname","transform_key":"text","required":false},
+        {"canonical_field":"amount","source_field":"amount","transform_key":"numeric","required":true},
+        {"canonical_field":"currency_code","source_field":"deal_currency_code","transform_key":"uppercase","required":true},
+        {"canonical_field":"stage_name","source_field":"dealstage","transform_key":"text","required":true},
+        {"canonical_field":"stage_category","source_field":"dealstage","transform_key":"value_map","required":true},
+        {"canonical_field":"sales_rep","source_field":"hubspot_owner_id","transform_key":"text","required":false},
+        {"canonical_field":"lead_source","source_field":"hs_analytics_source","transform_key":"text","required":false},
+        {"canonical_field":"created_at","source_field":"createdate","transform_key":"timestamp","required":false},
+        {"canonical_field":"expected_close_date","source_field":"closedate","transform_key":"timestamp","required":false},
+        {"canonical_field":"closed_at","source_field":"closedate","transform_key":"timestamp","required":false},
+        {"canonical_field":"source_updated_at","source_field":"hs_lastmodifieddate","transform_key":"timestamp","required":false}
+      ],
+      "value_mappings": [
+        {"canonical_field":"stage_category","source_value":"appointmentscheduled","canonical_value":"open"},
+        {"canonical_field":"stage_category","source_value":"qualifiedtobuy","canonical_value":"open"},
+        {"canonical_field":"stage_category","source_value":"closedwon","canonical_value":"won"},
+        {"canonical_field":"stage_category","source_value":"closedlost","canonical_value":"lost"}
+      ]
+    },
+    {
+      "connector_key": "salesforce_primary",
+      "connector_type": "salesforce",
+      "display_name": "Salesforce Opportunities",
+      "object_type": "deal",
+      "contract_version": 1,
+      "active": false,
+      "field_mappings": [
+        {"canonical_field":"deal_name","source_field":"Name","transform_key":"text","required":false},
+        {"canonical_field":"amount","source_field":"Amount","transform_key":"numeric","required":true},
+        {"canonical_field":"currency_code","source_field":"CurrencyIsoCode","transform_key":"uppercase","required":true},
+        {"canonical_field":"stage_name","source_field":"StageName","transform_key":"text","required":true},
+        {"canonical_field":"stage_category","source_field":"StageName","transform_key":"value_map","required":true},
+        {"canonical_field":"sales_rep","source_field":"OwnerId","transform_key":"text","required":false},
+        {"canonical_field":"lead_source","source_field":"LeadSource","transform_key":"text","required":false},
+        {"canonical_field":"created_at","source_field":"CreatedDate","transform_key":"timestamp","required":false},
+        {"canonical_field":"expected_close_date","source_field":"CloseDate","transform_key":"timestamp","required":false},
+        {"canonical_field":"closed_at","source_field":"CloseDate","transform_key":"timestamp","required":false},
+        {"canonical_field":"source_updated_at","source_field":"LastModifiedDate","transform_key":"timestamp","required":false}
+      ],
+      "value_mappings": [
+        {"canonical_field":"stage_category","source_value":"Prospecting","canonical_value":"open"},
+        {"canonical_field":"stage_category","source_value":"Negotiation/Review","canonical_value":"open"},
+        {"canonical_field":"stage_category","source_value":"Closed Won","canonical_value":"won"},
+        {"canonical_field":"stage_category","source_value":"Closed Lost","canonical_value":"lost"}
+      ]
+    }
+  ]
+}
