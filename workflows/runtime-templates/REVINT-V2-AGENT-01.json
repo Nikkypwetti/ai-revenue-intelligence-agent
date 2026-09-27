@@ -78,7 +78,7 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "SELECT governance.execute_agent_metric_request($1,$2,$3,$4,$5::jsonb) AS agent_result;",
+          "query": "WITH gate AS (\n  SELECT governance.acquire_runtime_gate('agent_reporting') AS reliability_gate\n)\nSELECT CASE\n  WHEN (reliability_gate->>'allowed')::boolean\n    THEN governance.execute_agent_metric_request($1,$2,$3,$4,$5::jsonb)\n  ELSE jsonb_build_object(\n    'status','rejected',\n    'reason','CIRCUIT_OPEN',\n    'retry_after',reliability_gate->>'retry_after'\n  )\nEND AS agent_result\nFROM gate;",
           "options": {
             "queryReplacement": "={{ [ $json.principal_key, $json.structured_intent.kpi_key, $json.structured_intent.period_key, $json.structured_intent.mode, JSON.stringify($json.structured_intent.filters ?? {}) ] }}"
           }
@@ -96,11 +96,14 @@
             "id": "REVINTPGREPORTRO001",
             "name": "REVINT | Reporting RO"
           }
-        }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       },
       {
         "parameters": {
-          "jsCode": "const ctx = $('CTX | Interpret Report Request').item.json;\nlet result = $json.agent_result;\n\nif (typeof result === 'string') {\n  try { result = JSON.parse(result); } catch { result = null; }\n}\n\nif (!result || result.status !== 'approved') {\n  const internalReason = result?.reason ?? 'REPORT_NOT_AUTHORIZED';\n  return {\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    http_status: 403,\n    response_body: {\n      status: 'rejected',\n      request_id: ctx.request_id,\n      correlation_id: ctx.correlation_id,\n      error: {\n        code: 'REPORT_NOT_AUTHORIZED',\n        message: 'The requested report could not be authorized for execution.'\n      }\n    },\n    audit_event: {\n      event_type: 'report_rejected',\n      stage: 'agent_core',\n      actor: 'n8n_agent_core',\n      payload: {\n        principal_key: ctx.principal_key,\n        kpi_key: ctx.structured_intent?.kpi_key ?? null,\n        period_key: ctx.structured_intent?.period_key ?? null,\n        mode: ctx.structured_intent?.mode ?? null,\n        reason: internalReason,\n        interpreter_type: ctx.interpreter_type\n      }\n    }\n  };\n}\n\nreturn {\n  request_id: ctx.request_id,\n  correlation_id: ctx.correlation_id,\n  http_status: 200,\n  response_body: {\n    status: 'success',\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    report: {\n      kpi_key: result.kpi_key,\n      mode: result.mode,\n      unit: result.unit,\n      currency_code: result.currency_code,\n      reporting_timezone: result.reporting_timezone,\n      current_period: result.current_period,\n      previous_period: result.previous_period,\n      analysis: result.analysis\n    }\n  },\n  audit_event: {\n    event_type: 'report_completed',\n    stage: 'agent_core',\n    actor: 'n8n_agent_core',\n    payload: {\n      principal_key: ctx.principal_key,\n      kpi_key: result.kpi_key,\n      period_key: ctx.structured_intent?.period_key ?? null,\n      mode: result.mode,\n      data_scope: result.data_scope,\n      interpreter_type: ctx.interpreter_type,\n      status: 'approved'\n    }\n  }\n};"
+          "jsCode": "const ctx = $('CTX | Interpret Report Request').item.json;\nlet result = $json.agent_result;\n\nif (typeof result === 'string') {\n  try { result = JSON.parse(result); } catch { result = null; }\n}\n\nif (!result || result.status !== 'approved') {\n  const internalReason = result?.reason ?? 'REPORT_NOT_AUTHORIZED';\n  const circuitOpen = internalReason === 'CIRCUIT_OPEN';\n  return {\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    http_status: circuitOpen ? 503 : 403,\n    response_body: {\n      status: 'rejected',\n      request_id: ctx.request_id,\n      correlation_id: ctx.correlation_id,\n      error: {\n        code: circuitOpen ? 'SERVICE_TEMPORARILY_UNAVAILABLE' : 'REPORT_NOT_AUTHORIZED',\n        message: circuitOpen\n          ? 'The reporting service is temporarily unavailable. Please retry after the circuit recovery window.'\n          : 'The requested report could not be authorized for execution.',\n        retry_after: circuitOpen ? (result?.retry_after ?? null) : undefined\n      }\n    },\n    audit_event: {\n      event_type: 'report_rejected',\n      stage: 'agent_core',\n      actor: 'n8n_agent_core',\n      payload: {\n        principal_key: ctx.principal_key,\n        kpi_key: ctx.structured_intent?.kpi_key ?? null,\n        period_key: ctx.structured_intent?.period_key ?? null,\n        mode: ctx.structured_intent?.mode ?? null,\n        reason: internalReason,\n        interpreter_type: ctx.interpreter_type\n      }\n    }\n  };\n}\n\nreturn {\n  request_id: ctx.request_id,\n  correlation_id: ctx.correlation_id,\n  http_status: 200,\n  response_body: {\n    status: 'success',\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    report: {\n      kpi_key: result.kpi_key,\n      mode: result.mode,\n      unit: result.unit,\n      currency_code: result.currency_code,\n      reporting_timezone: result.reporting_timezone,\n      current_period: result.current_period,\n      previous_period: result.previous_period,\n      analysis: result.analysis\n    }\n  },\n  audit_event: {\n    event_type: 'report_completed',\n    stage: 'agent_core',\n    actor: 'n8n_agent_core',\n    payload: {\n      principal_key: ctx.principal_key,\n      kpi_key: result.kpi_key,\n      period_key: ctx.structured_intent?.period_key ?? null,\n      mode: result.mode,\n      data_scope: result.data_scope,\n      interpreter_type: ctx.interpreter_type,\n      status: 'approved'\n    }\n  }\n};"
         },
         "id": "df64a15a-1ebf-4219-bbfe-e25395244cea",
         "name": "REP | Build Report Response",
@@ -114,9 +117,9 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "INSERT INTO audit.agent_events (event_id,request_id,correlation_id,event_type,stage,actor,payload) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb);",
+          "query": "SELECT governance.record_reliable_audit_event(\n  $1,$2,$3,$4,$5,$6,$7::jsonb,$8\n) AS audit_result;",
           "options": {
-            "queryReplacement": "={{ [ 'EVT-AGENT-' + $json.request_id, $json.request_id, $json.correlation_id, $json.audit_event.event_type, $json.audit_event.stage, $json.audit_event.actor, JSON.stringify($json.audit_event.payload) ] }}"
+            "queryReplacement": "={{ [ 'EVT-AGENT-' + $json.request_id, $json.request_id, $json.correlation_id, $json.audit_event.event_type, $json.audit_event.stage, $json.audit_event.actor, JSON.stringify($json.audit_event.payload), $json.audit_event.payload.reason === 'CIRCUIT_OPEN' ? null : 'agent_reporting' ] }}"
           }
         },
         "id": "dafd5d85-4abe-4e08-8afc-308215d4be5c",
@@ -133,7 +136,10 @@
             "id": "REVINTPGAUDITWR001",
             "name": "REVINT | Audit Writer"
           }
-        }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       },
       {
         "parameters": {
@@ -168,7 +174,7 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "INSERT INTO audit.agent_events (event_id,request_id,correlation_id,event_type,stage,actor,payload) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb);",
+          "query": "SELECT governance.record_reliable_audit_event(\n  $1,$2,$3,$4,$5,$6,$7::jsonb,NULL\n) AS audit_result;",
           "options": {
             "queryReplacement": "={{ [ 'EVT-AGENT-' + $json.request_id, $json.request_id, $json.correlation_id, $json.audit_event.event_type, $json.audit_event.stage, $json.audit_event.actor, JSON.stringify($json.audit_event.payload) ] }}"
           }
@@ -187,7 +193,10 @@
             "id": "REVINTPGAUDITWR001",
             "name": "REVINT | Audit Writer"
           }
-        }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       },
       {
         "parameters": {
@@ -306,7 +315,8 @@
     },
     "settings": {
       "executionOrder": "v1",
-      "availableInMCP": false
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
     },
     "pinData": {},
     "tags": []

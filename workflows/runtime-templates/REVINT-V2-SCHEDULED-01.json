@@ -80,7 +80,7 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "SELECT governance.build_scheduled_intelligence($1,$2::timestamptz) AS intelligence;",
+          "query": "WITH gate AS (\n  SELECT governance.acquire_runtime_gate('scheduled_intelligence') AS reliability_gate\n)\nSELECT CASE\n  WHEN (reliability_gate->>'allowed')::boolean\n    THEN governance.build_scheduled_intelligence($1,$2::timestamptz)\n  ELSE jsonb_build_object(\n    'status','skipped',\n    'cadence',$1,\n    'as_of',$2::timestamptz,\n    'reason','CIRCUIT_OPEN',\n    'retry_after',reliability_gate->>'retry_after'\n  )\nEND AS intelligence\nFROM gate;",
           "options": {
             "queryReplacement": "={{ [ $json.cadence, $json.scheduled_at ] }}"
           }
@@ -98,11 +98,14 @@
             "id": "REVINTPGREPORTRO001",
             "name": "REVINT | Reporting RO"
           }
-        }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       },
       {
         "parameters": {
-          "jsCode": "const raw = $json.intelligence;\nconst intelligence = typeof raw === 'string' ? JSON.parse(raw) : raw;\nconst now = new Date();\nconst suffix = Math.random().toString(36).slice(2, 10).toUpperCase();\nreturn {\n  event_id: `SCHED-${now.getTime()}-${suffix}`,\n  intelligence\n};"
+          "jsCode": "const raw = $json.intelligence;\nconst intelligence = typeof raw === 'string' ? JSON.parse(raw) : raw;\nconst cadence = String(intelligence?.cadence ?? 'unknown').toLowerCase();\nconst status = intelligence?.status === 'generated' ? 'generated' : 'skipped';\nconst asOf = new Date(intelligence?.as_of ?? Date.now());\nconst day = Number.isNaN(asOf.getTime())\n  ? new Date().toISOString().slice(0, 10)\n  : asOf.toISOString().slice(0, 10);\n\nreturn {\n  event_id: 'SCHED-' + cadence.toUpperCase() + '-' + day + '-' + status.toUpperCase(),\n  event_type: 'scheduled_intelligence_' + status,\n  reliability_component:\n    status === 'generated'\n      ? 'scheduled_intelligence'\n      : null,\n  intelligence\n};"
         },
         "id": "f6f9f0b8-0c57-4b0e-9ab3-b9443a80d106",
         "name": "REP | Prepare Intelligence Event",
@@ -116,9 +119,9 @@
       {
         "parameters": {
           "operation": "executeQuery",
-          "query": "INSERT INTO audit.agent_events (\n  event_id,\n  event_type,\n  stage,\n  actor,\n  payload\n)\nVALUES ($1,'scheduled_intelligence_generated','scheduled_intelligence','n8n_scheduled_intelligence',$2::jsonb);",
+          "query": "SELECT governance.record_reliable_audit_event(\n  $1,NULL,NULL,$2,'scheduled_intelligence',\n  'n8n_scheduled_intelligence',$3::jsonb,$4\n) AS audit_result;",
           "options": {
-            "queryReplacement": "={{ [ $json.event_id, JSON.stringify($json.intelligence) ] }}"
+            "queryReplacement": "={{ [ $json.event_id, $json.event_type, JSON.stringify($json.intelligence), $json.reliability_component ] }}"
           }
         },
         "id": "g7f9f0b8-0c57-4b0e-9ab3-b9443a80d107",
@@ -134,7 +137,10 @@
             "id": "REVINTPGAUDITWR001",
             "name": "REVINT | Audit Writer"
           }
-        }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       }
     ],
     "connections": {
@@ -207,7 +213,8 @@
     },
     "settings": {
       "executionOrder": "v1",
-      "availableInMCP": false
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
     },
     "pinData": {},
     "tags": []
