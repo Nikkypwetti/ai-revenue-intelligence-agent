@@ -4,6 +4,17 @@ A governed self-service revenue reporting system that turns manager questions in
 
 > **Design principle:** AI interprets the request. Deterministic controls authorize execution. PostgreSQL permissions enforce the final security boundary.
 
+
+## Agent v2 — deployable business edition
+
+A production-oriented evolution is now being built on the `agent-v2-stage1-deployment` branch.
+
+**Stage 1** introduces a reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
+
+See [Stage 1 deployment documentation](docs/deployment-stage-1.md).
+
+> Stage 1 is infrastructure foundation work, not a claim of full production readiness. HTTPS, production identity/RBAC, client-specific connectors, backup/restore validation, monitoring, and upgrade/rollback controls remain later stages.
+
 ## Business problem
 
 Revenue and operations managers often need quick answers about revenue, pipeline, deal stages, lead sources, and sales performance. A naive AI-to-database design can make those answers faster, but it can also introduce arbitrary SQL execution, inconsistent KPI definitions, unsupported filters, and weak auditability.
