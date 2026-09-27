@@ -64,8 +64,48 @@ psql_admin -c "SET ROLE \"$AUDIT_DB_WRITER_USER\";
   RESET ROLE;
   DELETE FROM audit.agent_events WHERE event_id='$event_id';"
 
+reader_business_count="$(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T \
+  -e PGPASSWORD="$REPORTING_DB_READER_PASSWORD" reporting-db \
+  psql -h 127.0.0.1 -U "$REPORTING_DB_READER_USER" -d "$REPORTING_DB_NAME" -X -q -A -t \
+  -c "SELECT count(*) FROM governance.business_config;")"
+
+[[ "$reader_business_count" -ge 1 ]] || {
+  echo "FAIL: reporting reader login could not read business configuration."
+  exit 1
+}
+
+if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T \
+  -e PGPASSWORD="$REPORTING_DB_READER_PASSWORD" reporting-db \
+  psql -h 127.0.0.1 -U "$REPORTING_DB_READER_USER" -d "$REPORTING_DB_NAME" \
+  -v ON_ERROR_STOP=1 -c "UPDATE governance.business_config SET updated_at=updated_at;" \
+  >/dev/null 2>&1; then
+  echo "FAIL: reporting reader unexpectedly performed a governance UPDATE."
+  exit 1
+fi
+
+login_event_id="stage2-login-check-$(date +%s)"
+docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T \
+  -e PGPASSWORD="$AUDIT_DB_WRITER_PASSWORD" reporting-db \
+  psql -h 127.0.0.1 -U "$AUDIT_DB_WRITER_USER" -d "$REPORTING_DB_NAME" \
+  -v ON_ERROR_STOP=1 -c "INSERT INTO audit.agent_events (event_id,event_type,stage,payload)
+  VALUES ('$login_event_id','credential_verification','stage2','{}'::jsonb);" \
+  >/dev/null
+
+if docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T \
+  -e PGPASSWORD="$AUDIT_DB_WRITER_PASSWORD" reporting-db \
+  psql -h 127.0.0.1 -U "$AUDIT_DB_WRITER_USER" -d "$REPORTING_DB_NAME" \
+  -v ON_ERROR_STOP=1 -c "SELECT * FROM governance.business_config;" \
+  >/dev/null 2>&1; then
+  echo "FAIL: audit writer unexpectedly read governance configuration."
+  exit 1
+fi
+
+psql_admin -c "DELETE FROM audit.agent_events WHERE event_id='$login_event_id';" >/dev/null
+
 echo "PASS: client business configuration exists."
 echo "PASS: governed KPI catalogue contains $kpi_count active definitions."
 echo "PASS: reporting reader has read-only reporting/governance access."
 echo "PASS: audit writer can insert audit events without reporting/governance read access."
+echo "PASS: reporting reader and audit writer passwords authenticate successfully."
+echo "PASS: runtime credential boundaries hold under direct PostgreSQL login."
 echo "PASS: Stage 2 database security verification passed."
