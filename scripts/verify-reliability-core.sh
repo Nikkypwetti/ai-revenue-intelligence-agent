@@ -65,9 +65,9 @@ cleanup() {
 
     DELETE FROM governance.reliability_policy
     WHERE component_key='reliability_verify';
-  " >/dev/null 2>&1 || true
+  " >/dev/null
 }
-trap cleanup EXIT
+trap 'cleanup || true' EXIT
 cleanup
 
 policy_state="$(psql_admin -c "
@@ -79,10 +79,11 @@ policy_state="$(psql_admin -c "
     AND component_key IN (
       'rest_ingestion',
       'agent_reporting',
-      'scheduled_intelligence'
+      'scheduled_intelligence',
+      'observability'
     );
 ")"
-[[ "$policy_state" == "3|9|2000" ]] || {
+[[ "$policy_state" == "4|12|2000" ]] || {
   echo "FAIL: runtime reliability policies are missing or incorrectly configured."
   exit 1
 }
@@ -97,10 +98,11 @@ workflow_state="$(psql_n8n -c "
   WHERE id IN (
     'REVINTV2RESTINGEST01',
     'REVINTV2AGENTCORE01',
-    'REVINTV2SCHEDULED01'
+    'REVINTV2SCHEDULED01',
+    'REVINTV2OBS01'
   );
 ")"
-[[ "$workflow_state" == "3|3" ]] || {
+[[ "$workflow_state" == "4|4" ]] || {
   echo "FAIL: protected workflows do not all reference the reliability error workflow."
   exit 1
 }
@@ -146,12 +148,13 @@ retry_state="$(psql_n8n -c "
     WHERE w.id IN (
       'REVINTV2RESTINGEST01',
       'REVINTV2AGENTCORE01',
-      'REVINTV2SCHEDULED01'
+      'REVINTV2SCHEDULED01',
+      'REVINTV2OBS01'
     )
     GROUP BY w.id
   ) s;
 ")"
-[[ "$retry_state" == "REVINTV2AGENTCORE01:3:3,REVINTV2RESTINGEST01:4:4,REVINTV2SCHEDULED01:2:2" ]] || {
+[[ "$retry_state" == "REVINTV2AGENTCORE01:3:3,REVINTV2OBS01:2:2,REVINTV2RESTINGEST01:4:4,REVINTV2SCHEDULED01:2:2" ]] || {
   echo "FAIL: one or more safe PostgreSQL nodes lack the bounded retry policy."
   exit 1
 }
@@ -163,13 +166,14 @@ audit_helper_count="$(psql_n8n -c "
   WHERE w.id IN (
     'REVINTV2RESTINGEST01',
     'REVINTV2AGENTCORE01',
-    'REVINTV2SCHEDULED01'
+    'REVINTV2SCHEDULED01',
+    'REVINTV2OBS01'
   )
     AND n->>'type'='n8n-nodes-base.postgres'
     AND n->>'name' LIKE 'AUD |%'
     AND (n->'parameters'->>'query') LIKE '%record_reliable_audit_event%';
 ")"
-[[ "$audit_helper_count" == "4" ]] || {
+[[ "$audit_helper_count" == "5" ]] || {
   echo "FAIL: runtime audit nodes do not all use the conflict-safe audit helper."
   exit 1
 }
@@ -445,5 +449,8 @@ echo "PASS: runtime audit writes are conflict-safe without broadening audit-writ
 echo "PASS: old n8n port 5678 remains available and Agent v2 remains isolated on 5681."
 
 bash "$ROOT_DIR/scripts/verify-scheduled-intelligence.sh"
+
+cleanup
+trap - EXIT
 
 echo "PASS: reliability-core verification passed."

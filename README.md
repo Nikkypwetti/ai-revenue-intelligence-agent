@@ -7,7 +7,7 @@ A governed self-service revenue reporting system that turns manager questions in
 
 ## Agent v2 — deployable business edition
 
-Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent execution core, and Scheduled Intelligence are merged and locally verified. The runtime Reliability core is also locally verified on the isolated Agent v2 deployment.
+Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent execution core, Scheduled Intelligence, and the runtime Reliability core are merged and locally verified. Monitoring & Observability is also locally verified on the isolated Agent v2 deployment.
 
 **Stage 1** provides the reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
 
@@ -27,9 +27,11 @@ Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent e
 
 **Reliability core** adds bounded three-attempt retries for safe database operations, a dedicated Agent v2 Error Trigger workflow, deterministic terminal-failure classification, idempotent dead-letter persistence, conflict-safe audit retries, and per-component circuit breakers with controlled half-open probes.
 
-See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), [identity/permissions documentation](docs/identity-permissions.md), [Agent execution-core documentation](docs/agent-execution-core.md), [Scheduled Intelligence documentation](docs/scheduled-intelligence.md), and [Reliability documentation](docs/reliability-core.md).
+**Monitoring & Observability** adds governed component/overall runtime status views, alert-ready circuit/failure/dead-letter rows, a bounded runtime snapshot function, and a five-minute Agent v2 heartbeat that persists snapshot history through the existing Audit Writer boundary.
 
-> These stages are production-foundation work, not a claim of full production readiness. A live LLM intent adapter, external CRM/billing adapters, external Slack/email delivery and incident notifications, HTTPS/public ingress, external authentication/SSO, backup/restore automation, monitoring/observability, and upgrade/rollback controls remain later stages.
+See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), [identity/permissions documentation](docs/identity-permissions.md), [Agent execution-core documentation](docs/agent-execution-core.md), [Scheduled Intelligence documentation](docs/scheduled-intelligence.md), [Reliability documentation](docs/reliability-core.md), and [Monitoring & Observability documentation](docs/observability-core.md).
+
+> These stages are production-foundation work, not a claim of full production readiness. A live LLM intent adapter, external CRM/billing adapters, external Slack/email delivery and incident notifications, HTTPS/public ingress, external authentication/SSO, backup/restore automation, and upgrade/rollback controls remain later stages.
 
 ## Business problem
 
