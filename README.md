@@ -17,7 +17,9 @@ Stages 1–3 are merged and locally verified. Stage 4 runtime integration and th
 
 **Stage 4** connects those controls to the isolated n8n runtime with encrypted least-privilege credentials and an authenticated REST deal-ingestion workflow that writes only through the controlled canonical ingestion gateway.
 
-See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), and [Stage 4 runtime documentation](docs/deployment-stage-4.md).
+**KPI semantic-layer completion** preserves the existing four KPI definitions and query keys while adding explicit formula metadata, governed dimension/filter/date-field catalogues, normalized KPI policies, and deterministic semantic resolution.
+
+See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), and [KPI semantic-layer documentation](docs/semantic-layer.md).
 
 > These stages are production-foundation work, not a claim of full production readiness. External CRM/billing adapters, HTTPS/public ingress, external identity/RBAC, backup/restore automation, monitoring, and upgrade/rollback controls remain later stages.
 
