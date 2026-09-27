@@ -2,7 +2,7 @@
 
 ## Status
 
-Stage 2 adds the first client-specific configuration and database permission boundary on top of the verified Stage 1 deployment.
+Stage 2 adds the first client-specific configuration and database permission boundary on top of the verified Stage 1 deployment. The database security layer has been locally verified on the reference deployment.
 
 This stage is **not yet a full production release**. Public HTTPS, external identity/RBAC, backup/restore automation, monitoring, upgrade/rollback, connector onboarding, and full workflow migration remain later stages.
 
@@ -133,6 +133,20 @@ Stage 2 is complete only after local verification confirms:
 7. audit writer cannot read reporting data
 8. administrator credential is absent from ordinary n8n workflow nodes
 9. existing Stage 1 health checks continue to pass
+
+## Verified reference-deployment result
+
+The Stage 2 verification script has confirmed:
+
+- client business configuration exists
+- four active governed KPI definitions are present
+- reporting-reader credentials authenticate successfully
+- reporting reader has reporting/governance read access and no governance update access
+- audit-writer credentials authenticate successfully
+- audit writer can insert audit events
+- audit writer cannot read reporting/governance data
+- the Stage 1 container health checks remain green
+- the fresh Agent v2 n8n instance contains no database credentials yet, so no administrator database credential is embedded in ordinary workflow nodes
 
 ## Next stage
 
