@@ -40,7 +40,7 @@
         "alwaysOutputData": true,
         "parameters": {
           "operation": "executeQuery",
-          "query": "SELECT\n  trim(both FROM bc.currency_code::text) AS currency_code,\n  cr.connector_key,\n  cr.active AS connector_active,\n  cr.contract_version\nFROM governance.business_config bc\nJOIN governance.connector_registry cr\n  ON cr.connector_key = 'rest_ingestion_api'\nORDER BY bc.updated_at DESC\nLIMIT 1;",
+          "query": "SELECT\n  governance.acquire_runtime_gate('rest_ingestion') AS reliability_gate,\n  trim(both FROM bc.currency_code::text) AS currency_code,\n  cr.connector_key,\n  cr.active AS connector_active,\n  cr.contract_version\nFROM governance.business_config bc\nJOIN governance.connector_registry cr\n  ON cr.connector_key = 'rest_ingestion_api'\nORDER BY bc.updated_at DESC\nLIMIT 1;",
           "options": {}
         },
         "credentials": {
@@ -48,7 +48,10 @@
             "id": "REVINTPGREPORTRO001",
             "name": "REVINT | Reporting RO"
           }
-        }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       },
       {
         "id": "d7386604-3647-4495-a300-9889dc52ab03",
@@ -61,7 +64,7 @@
         ],
         "parameters": {
           "mode": "runOnceForEachItem",
-          "jsCode": "const webhook = $('INT | Authenticated Deal Ingestion').item.json;\nconst governance = $json ?? {};\nconst body = webhook.body && typeof webhook.body === 'object' && !Array.isArray(webhook.body)\n  ? webhook.body\n  : webhook;\n\nconst errors = [];\nconst now = new Date();\nconst suffix = Math.random().toString(36).slice(2, 10).toUpperCase();\nconst requestId = `INGEST-${now.getTime()}-${suffix}`;\nconst correlationId = `CORR-${now.getTime()}-${suffix}`;\n\nif (governance.connector_key !== 'rest_ingestion_api' ||\n    governance.connector_active !== true ||\n    Number(governance.contract_version) !== 1) {\n  errors.push({code:'CONNECTOR_NOT_READY', field:'connector', message:'REST ingestion connector is not active on contract version 1'});\n}\n\nconst sourceRecordId = typeof body.source_record_id === 'string' ? body.source_record_id.trim() : '';\nif (!sourceRecordId || sourceRecordId.length > 200) {\n  errors.push({code:'SOURCE_RECORD_ID_INVALID', field:'source_record_id', message:'source_record_id is required and must be at most 200 characters'});\n}\n\nconst amount = Number(body.amount);\nif (!Number.isFinite(amount) || amount < 0 || amount > 9999999999999999.99) {\n  errors.push({code:'AMOUNT_INVALID', field:'amount', message:'amount must be a non-negative number within the canonical numeric range'});\n}\nconst currency = typeof body.currency_code === 'string' ? body.currency_code.trim().toUpperCase() : '';\nconst expectedCurrency = typeof governance.currency_code === 'string' ? governance.currency_code.trim().toUpperCase() : '';\nif (!/^[A-Z]{3}$/.test(currency) || !expectedCurrency || currency !== expectedCurrency) {\n  errors.push({code:'CURRENCY_INVALID', field:'currency_code', message:'currency_code must match the configured business currency'});\n}\n\nconst stageName = typeof body.stage_name === 'string' ? body.stage_name.trim() : '';\nif (!stageName || stageName.length > 200) {\n  errors.push({code:'STAGE_NAME_INVALID', field:'stage_name', message:'stage_name is required and must be at most 200 characters'});\n}\n\nconst stageCategory = typeof body.stage_category === 'string' ? body.stage_category.trim().toLowerCase() : '';\nif (!['open','won','lost'].includes(stageCategory)) {\n  errors.push({code:'STAGE_CATEGORY_INVALID', field:'stage_category', message:'stage_category must be open, won, or lost'});\n}\n\nfunction normalizeTimestamp(field, required = false) {\n  const raw = body[field];\n  if (raw === undefined || raw === null || raw === '') {\n    if (required) errors.push({code:'TIMESTAMP_REQUIRED', field, message:`${field} is required for closed deals`});\n    return null;\n  }\n  const parsed = new Date(raw);\n  if (Number.isNaN(parsed.getTime())) {\n    errors.push({code:'TIMESTAMP_INVALID', field, message:`${field} must be a valid ISO-compatible timestamp`});\n    return null;\n  }\n  return parsed.toISOString();\n}\nconst createdAt = normalizeTimestamp('created_at');\nconst expectedCloseDate = normalizeTimestamp('expected_close_date');\nconst closedAt = normalizeTimestamp('closed_at', ['won','lost'].includes(stageCategory));\nconst sourceUpdatedAt = normalizeTimestamp('source_updated_at');\n\nconst normalizedPayload = {\n  ...body,\n  amount,\n  currency_code: currency,\n  stage_name: stageName,\n  stage_category: stageCategory,\n  created_at: createdAt,\n  expected_close_date: expectedCloseDate,\n  closed_at: stageCategory === 'open' ? null : closedAt,\n  source_updated_at: sourceUpdatedAt\n};\n\nif (JSON.stringify(normalizedPayload).length > 65536) {\n  errors.push({code:'PAYLOAD_TOO_LARGE', field:'body', message:'JSON payload must not exceed 64 KiB after normalization'});\n}\n\nreturn {\n  connector_key: 'rest_ingestion_api',\n  request_id: requestId,\n  correlation_id: correlationId,\n  source_record_id: sourceRecordId,\n  source_payload: normalizedPayload,\n  validation: {is_valid: errors.length === 0, errors, validated_at: now.toISOString()},\n  workflow_stage: errors.length === 0 ? 'rest_payload_validated' : 'rest_payload_rejected'\n};"
+          "jsCode": "const webhook = $('INT | Authenticated Deal Ingestion').item.json;\nconst governance = $json ?? {};\nconst body = webhook.body && typeof webhook.body === 'object' && !Array.isArray(webhook.body)\n  ? webhook.body\n  : webhook;\n\nconst errors = [];\nlet reliabilityGate = governance.reliability_gate ?? null;\nif (typeof reliabilityGate === 'string') {\n  try { reliabilityGate = JSON.parse(reliabilityGate); } catch { reliabilityGate = null; }\n}\nif (reliabilityGate?.allowed === false) {\n  errors.push({\n    code: 'RELIABILITY_CIRCUIT_OPEN',\n    field: 'runtime',\n    message: 'REST ingestion is temporarily unavailable while the reliability circuit is open.',\n    retry_after: reliabilityGate.retry_after ?? null\n  });\n}\nconst now = new Date();\nconst suffix = Math.random().toString(36).slice(2, 10).toUpperCase();\nconst requestId = `INGEST-${now.getTime()}-${suffix}`;\nconst correlationId = `CORR-${now.getTime()}-${suffix}`;\n\nif (governance.connector_key !== 'rest_ingestion_api' ||\n    governance.connector_active !== true ||\n    Number(governance.contract_version) !== 1) {\n  errors.push({code:'CONNECTOR_NOT_READY', field:'connector', message:'REST ingestion connector is not active on contract version 1'});\n}\n\nconst sourceRecordId = typeof body.source_record_id === 'string' ? body.source_record_id.trim() : '';\nif (!sourceRecordId || sourceRecordId.length > 200) {\n  errors.push({code:'SOURCE_RECORD_ID_INVALID', field:'source_record_id', message:'source_record_id is required and must be at most 200 characters'});\n}\n\nconst amount = Number(body.amount);\nif (!Number.isFinite(amount) || amount < 0 || amount > 9999999999999999.99) {\n  errors.push({code:'AMOUNT_INVALID', field:'amount', message:'amount must be a non-negative number within the canonical numeric range'});\n}\nconst currency = typeof body.currency_code === 'string' ? body.currency_code.trim().toUpperCase() : '';\nconst expectedCurrency = typeof governance.currency_code === 'string' ? governance.currency_code.trim().toUpperCase() : '';\nif (!/^[A-Z]{3}$/.test(currency) || !expectedCurrency || currency !== expectedCurrency) {\n  errors.push({code:'CURRENCY_INVALID', field:'currency_code', message:'currency_code must match the configured business currency'});\n}\n\nconst stageName = typeof body.stage_name === 'string' ? body.stage_name.trim() : '';\nif (!stageName || stageName.length > 200) {\n  errors.push({code:'STAGE_NAME_INVALID', field:'stage_name', message:'stage_name is required and must be at most 200 characters'});\n}\n\nconst stageCategory = typeof body.stage_category === 'string' ? body.stage_category.trim().toLowerCase() : '';\nif (!['open','won','lost'].includes(stageCategory)) {\n  errors.push({code:'STAGE_CATEGORY_INVALID', field:'stage_category', message:'stage_category must be open, won, or lost'});\n}\n\nfunction normalizeTimestamp(field, required = false) {\n  const raw = body[field];\n  if (raw === undefined || raw === null || raw === '') {\n    if (required) errors.push({code:'TIMESTAMP_REQUIRED', field, message:`${field} is required for closed deals`});\n    return null;\n  }\n  const parsed = new Date(raw);\n  if (Number.isNaN(parsed.getTime())) {\n    errors.push({code:'TIMESTAMP_INVALID', field, message:`${field} must be a valid ISO-compatible timestamp`});\n    return null;\n  }\n  return parsed.toISOString();\n}\nconst createdAt = normalizeTimestamp('created_at');\nconst expectedCloseDate = normalizeTimestamp('expected_close_date');\nconst closedAt = normalizeTimestamp('closed_at', ['won','lost'].includes(stageCategory));\nconst sourceUpdatedAt = normalizeTimestamp('source_updated_at');\n\nconst normalizedPayload = {\n  ...body,\n  amount,\n  currency_code: currency,\n  stage_name: stageName,\n  stage_category: stageCategory,\n  created_at: createdAt,\n  expected_close_date: expectedCloseDate,\n  closed_at: stageCategory === 'open' ? null : closedAt,\n  source_updated_at: sourceUpdatedAt\n};\n\nif (JSON.stringify(normalizedPayload).length > 65536) {\n  errors.push({code:'PAYLOAD_TOO_LARGE', field:'body', message:'JSON payload must not exceed 64 KiB after normalization'});\n}\n\nreturn {\n  connector_key: 'rest_ingestion_api',\n  request_id: requestId,\n  correlation_id: correlationId,\n  source_record_id: sourceRecordId,\n  source_payload: normalizedPayload,\n  validation: {is_valid: errors.length === 0, errors, validated_at: now.toISOString()},\n  workflow_stage: errors.length === 0 ? 'rest_payload_validated' : 'rest_payload_rejected'\n};"
         }
       },
       {
@@ -119,7 +122,10 @@
             "id": "REVINTPGINGESTWR001",
             "name": "REVINT | Connector Writer"
           }
-        }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       },
       {
         "id": "34030f8b-623d-4772-a8d0-1f4ad97e0607",
@@ -142,7 +148,10 @@
             "id": "REVINTPGREPORTRO001",
             "name": "REVINT | Reporting RO"
           }
-        }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       },
       {
         "id": "6ca811c7-d2d5-4d76-b2e5-376f3deabc08",
@@ -156,7 +165,7 @@
         "alwaysOutputData": true,
         "parameters": {
           "operation": "executeQuery",
-          "query": "INSERT INTO audit.agent_events (\n  event_id,\n  request_id,\n  correlation_id,\n  event_type,\n  stage,\n  actor,\n  payload\n)\nVALUES ($1,$2,$3,'deal_ingested','stage4','n8n_rest_connector',$4::jsonb);",
+          "query": "SELECT governance.record_reliable_audit_event(\n  $1,$2,$3,'deal_ingested','stage4','n8n_rest_connector',$4::jsonb,'rest_ingestion'\n) AS audit_result;",
           "options": {
             "queryReplacement": "={{ [ 'EVT-' + $('VAL | Normalize REST Deal').item.json.request_id, $('VAL | Normalize REST Deal').item.json.request_id, $('VAL | Normalize REST Deal').item.json.correlation_id, JSON.stringify({ connector_key: $('DB | Verify Canonical Deal').item.json.connector_key, source_record_id: $('DB | Verify Canonical Deal').item.json.source_record_id, deal_id: $('DB | Verify Canonical Deal').item.json.deal_id, amount: $('DB | Verify Canonical Deal').item.json.amount, currency_code: $('DB | Verify Canonical Deal').item.json.currency_code, stage_category: $('DB | Verify Canonical Deal').item.json.stage_category }) ] }}"
           }
@@ -166,7 +175,10 @@
             "id": "REVINTPGAUDITWR001",
             "name": "REVINT | Audit Writer"
           }
-        }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       },
       {
         "id": "ac6655fa-f70c-4d13-9bff-25f70b018609",
@@ -210,7 +222,7 @@
         ],
         "parameters": {
           "mode": "runOnceForEachItem",
-          "jsCode": "return {\n  status: 'rejected',\n  http_status: 400,\n  request_id: $json.request_id,\n  correlation_id: $json.correlation_id,\n  connector_key: $json.connector_key,\n  source_record_id: $json.source_record_id || null,\n  errors: $json.validation?.errors ?? [{code:'VALIDATION_FAILED', message:'Request validation failed'}]\n};"
+          "jsCode": "const rejectionErrors = $json.validation?.errors ?? [\n  {code:'VALIDATION_FAILED', message:'Request validation failed'}\n];\nconst circuitOpen = rejectionErrors.some(e => e.code === 'RELIABILITY_CIRCUIT_OPEN');\n\nreturn {\n  status: 'rejected',\n  http_status: circuitOpen ? 503 : 400,\n  request_id: $json.request_id,\n  correlation_id: $json.correlation_id,\n  connector_key: $json.connector_key,\n  source_record_id: $json.source_record_id || null,\n  errors: rejectionErrors\n};"
         }
       },
       {
@@ -341,7 +353,8 @@
     },
     "settings": {
       "executionOrder": "v1",
-      "availableInMCP": false
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
     },
     "pinData": {},
     "tags": []

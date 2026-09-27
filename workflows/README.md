@@ -26,6 +26,14 @@ The locally verified proactive pipeline workflow. It runs daily at 08:00 and wee
 
 It detects stale open records, missing expected close dates, and material open-pipeline movement against the prior snapshot. External Slack/email delivery is intentionally not configured yet.
 
+### REVINT-V2-SYS-01 — Runtime Reliability Handler
+
+`runtime-templates/REVINT-V2-SYS-01.json`
+
+The locally verified Agent v2 terminal-failure workflow. The REST ingestion, reporting Agent, and Scheduled Intelligence workflows point to it through n8n's `errorWorkflow` setting after bounded node retries are exhausted.
+
+It redacts and normalizes the terminal error, then records an idempotent runtime failure, dead-letter entry, and per-component circuit state through the existing Audit Writer credential. It does not automatically replay failed business workflows or require an n8n API key.
+
 ## Sanitized portfolio workflows
 
 ### REVINT-01 — Manager Request Orchestrator
