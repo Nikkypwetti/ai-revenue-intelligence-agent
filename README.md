@@ -7,7 +7,7 @@ A governed self-service revenue reporting system that turns manager questions in
 
 ## Agent v2 — deployable business edition
 
-Stage 1 and Stage 2 are merged and locally verified. Stage 3 connector/data-contract controls are locally verified on the `agent-v2-stage3-connectors-data-contract` branch.
+Stage 1 and Stage 2 are merged and locally verified. Stage 3 connector/data-contract controls are also locally verified and implemented in this repository.
 
 **Stage 1** provides the reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
 
