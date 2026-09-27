@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "connectors": [
+    {
+      "connector_key": "rest_ingestion_api",
+      "connector_type": "rest_api",
+      "display_name": "Authenticated REST Deal Ingestion API",
+      "object_type": "deal",
+      "contract_version": 1,
+      "active": true,
+      "field_mappings": [
+        {"canonical_field":"deal_name","source_field":"deal_name","transform_key":"text","required":false},
+        {"canonical_field":"amount","source_field":"amount","transform_key":"numeric","required":true},
+        {"canonical_field":"currency_code","source_field":"currency_code","transform_key":"uppercase","required":true},
+        {"canonical_field":"stage_name","source_field":"stage_name","transform_key":"text","required":true},
+        {"canonical_field":"stage_category","source_field":"stage_category","transform_key":"value_map","required":true},
+        {"canonical_field":"sales_rep","source_field":"sales_rep","transform_key":"text","required":false},
+        {"canonical_field":"lead_source","source_field":"lead_source","transform_key":"text","required":false},
+        {"canonical_field":"created_at","source_field":"created_at","transform_key":"timestamp","required":false},
+        {"canonical_field":"expected_close_date","source_field":"expected_close_date","transform_key":"timestamp","required":false},
+        {"canonical_field":"closed_at","source_field":"closed_at","transform_key":"timestamp","required":false},
+        {"canonical_field":"source_updated_at","source_field":"source_updated_at","transform_key":"timestamp","required":false}
+      ],
+      "value_mappings": [
+        {"canonical_field":"stage_category","source_value":"open","canonical_value":"open"},
+        {"canonical_field":"stage_category","source_value":"won","canonical_value":"won"},
+        {"canonical_field":"stage_category","source_value":"lost","canonical_value":"lost"}
+      ]
+    }
+  ]
+}

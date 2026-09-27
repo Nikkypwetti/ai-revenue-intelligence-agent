@@ -7,7 +7,7 @@ A governed self-service revenue reporting system that turns manager questions in
 
 ## Agent v2 — deployable business edition
 
-Stage 1 and Stage 2 are merged and locally verified. Stage 3 connector/data-contract controls are also locally verified and implemented in this repository.
+Stages 1–3 are merged and locally verified. Stage 4 runtime integration and the authenticated REST ingestion adapter are also locally verified on the isolated Agent v2 deployment.
 
 **Stage 1** provides the reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
 
@@ -15,9 +15,11 @@ Stage 1 and Stage 2 are merged and locally verified. Stage 3 connector/data-cont
 
 **Stage 3** adds non-secret connector mapping configuration, deterministic source normalization, a canonical `reporting.deals` contract, a least-privilege connector-ingestion role, and approved query templates that resolve the four governed KPI query keys.
 
-See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), and [Stage 3 documentation](docs/deployment-stage-3.md).
+**Stage 4** connects those controls to the isolated n8n runtime with encrypted least-privilege credentials and an authenticated REST deal-ingestion workflow that writes only through the controlled canonical ingestion gateway.
 
-> These stages are production-foundation work, not a claim of full production readiness. Live connector adapters, HTTPS, external identity/RBAC, backup/restore automation, monitoring, and upgrade/rollback controls remain later stages.
+See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), and [Stage 4 runtime documentation](docs/deployment-stage-4.md).
+
+> These stages are production-foundation work, not a claim of full production readiness. External CRM/billing adapters, HTTPS/public ingress, external identity/RBAC, backup/restore automation, monitoring, and upgrade/rollback controls remain later stages.
 
 ## Business problem
 

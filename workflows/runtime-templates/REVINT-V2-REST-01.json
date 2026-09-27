@@ -1,0 +1,349 @@
+[
+  {
+    "id": "REVINTV2RESTINGEST01",
+    "name": "REVINT-V2-REST-01 | Authenticated Deal Ingestion",
+    "active": false,
+    "nodes": [
+      {
+        "id": "b52e8de8-6dc3-42b7-bcdb-176baf8d4301",
+        "name": "INT | Authenticated Deal Ingestion",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2.1,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "revint/v2/deals",
+          "authentication": "headerAuth",
+          "responseMode": "responseNode",
+          "options": {}
+        },
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REVINTRESTHEADER001",
+            "name": "REVINT | Ingestion Header Auth"
+          }
+        },
+        "webhookId": "c1189f29-21ab-4476-8ef7-c0a672471613"
+      },
+      {
+        "id": "8f065041-39a6-4f31-8742-80a88999cc02",
+        "name": "DB | Load Runtime Governance",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          260,
+          0
+        ],
+        "alwaysOutputData": true,
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  trim(both FROM bc.currency_code::text) AS currency_code,\n  cr.connector_key,\n  cr.active AS connector_active,\n  cr.contract_version\nFROM governance.business_config bc\nJOIN governance.connector_registry cr\n  ON cr.connector_key = 'rest_ingestion_api'\nORDER BY bc.updated_at DESC\nLIMIT 1;",
+          "options": {}
+        },
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        }
+      },
+      {
+        "id": "d7386604-3647-4495-a300-9889dc52ab03",
+        "name": "VAL | Normalize REST Deal",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const webhook = $('INT | Authenticated Deal Ingestion').item.json;\nconst governance = $json ?? {};\nconst body = webhook.body && typeof webhook.body === 'object' && !Array.isArray(webhook.body)\n  ? webhook.body\n  : webhook;\n\nconst errors = [];\nconst now = new Date();\nconst suffix = Math.random().toString(36).slice(2, 10).toUpperCase();\nconst requestId = `INGEST-${now.getTime()}-${suffix}`;\nconst correlationId = `CORR-${now.getTime()}-${suffix}`;\n\nif (governance.connector_key !== 'rest_ingestion_api' ||\n    governance.connector_active !== true ||\n    Number(governance.contract_version) !== 1) {\n  errors.push({code:'CONNECTOR_NOT_READY', field:'connector', message:'REST ingestion connector is not active on contract version 1'});\n}\n\nconst sourceRecordId = typeof body.source_record_id === 'string' ? body.source_record_id.trim() : '';\nif (!sourceRecordId || sourceRecordId.length > 200) {\n  errors.push({code:'SOURCE_RECORD_ID_INVALID', field:'source_record_id', message:'source_record_id is required and must be at most 200 characters'});\n}\n\nconst amount = Number(body.amount);\nif (!Number.isFinite(amount) || amount < 0 || amount > 9999999999999999.99) {\n  errors.push({code:'AMOUNT_INVALID', field:'amount', message:'amount must be a non-negative number within the canonical numeric range'});\n}\nconst currency = typeof body.currency_code === 'string' ? body.currency_code.trim().toUpperCase() : '';\nconst expectedCurrency = typeof governance.currency_code === 'string' ? governance.currency_code.trim().toUpperCase() : '';\nif (!/^[A-Z]{3}$/.test(currency) || !expectedCurrency || currency !== expectedCurrency) {\n  errors.push({code:'CURRENCY_INVALID', field:'currency_code', message:'currency_code must match the configured business currency'});\n}\n\nconst stageName = typeof body.stage_name === 'string' ? body.stage_name.trim() : '';\nif (!stageName || stageName.length > 200) {\n  errors.push({code:'STAGE_NAME_INVALID', field:'stage_name', message:'stage_name is required and must be at most 200 characters'});\n}\n\nconst stageCategory = typeof body.stage_category === 'string' ? body.stage_category.trim().toLowerCase() : '';\nif (!['open','won','lost'].includes(stageCategory)) {\n  errors.push({code:'STAGE_CATEGORY_INVALID', field:'stage_category', message:'stage_category must be open, won, or lost'});\n}\n\nfunction normalizeTimestamp(field, required = false) {\n  const raw = body[field];\n  if (raw === undefined || raw === null || raw === '') {\n    if (required) errors.push({code:'TIMESTAMP_REQUIRED', field, message:`${field} is required for closed deals`});\n    return null;\n  }\n  const parsed = new Date(raw);\n  if (Number.isNaN(parsed.getTime())) {\n    errors.push({code:'TIMESTAMP_INVALID', field, message:`${field} must be a valid ISO-compatible timestamp`});\n    return null;\n  }\n  return parsed.toISOString();\n}\nconst createdAt = normalizeTimestamp('created_at');\nconst expectedCloseDate = normalizeTimestamp('expected_close_date');\nconst closedAt = normalizeTimestamp('closed_at', ['won','lost'].includes(stageCategory));\nconst sourceUpdatedAt = normalizeTimestamp('source_updated_at');\n\nconst normalizedPayload = {\n  ...body,\n  amount,\n  currency_code: currency,\n  stage_name: stageName,\n  stage_category: stageCategory,\n  created_at: createdAt,\n  expected_close_date: expectedCloseDate,\n  closed_at: stageCategory === 'open' ? null : closedAt,\n  source_updated_at: sourceUpdatedAt\n};\n\nif (JSON.stringify(normalizedPayload).length > 65536) {\n  errors.push({code:'PAYLOAD_TOO_LARGE', field:'body', message:'JSON payload must not exceed 64 KiB after normalization'});\n}\n\nreturn {\n  connector_key: 'rest_ingestion_api',\n  request_id: requestId,\n  correlation_id: correlationId,\n  source_record_id: sourceRecordId,\n  source_payload: normalizedPayload,\n  validation: {is_valid: errors.length === 0, errors, validated_at: now.toISOString()},\n  workflow_stage: errors.length === 0 ? 'rest_payload_validated' : 'rest_payload_rejected'\n};"
+        }
+      },
+      {
+        "id": "387d72e6-2434-47f3-a6f0-b28931d44204",
+        "name": "VAL | REST Payload Valid?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          780,
+          0
+        ],
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "04d28d34-fc35-4dc0-bf0f-91e2cb4d8205",
+                "leftValue": "={{ $json.validation.is_valid }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        }
+      },
+      {
+        "id": "6360253e-a7f9-4db3-b15d-5c3f3c228306",
+        "name": "DB | Ingest Canonical Deal",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1040,
+          -120
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT deal_id, ingestion_status FROM ingestion.ingest_deal_from_source($1,$2,$3::jsonb);",
+          "options": {
+            "queryReplacement": "={{ [ $json.connector_key, $json.source_record_id, JSON.stringify($json.source_payload) ] }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGINGESTWR001",
+            "name": "REVINT | Connector Writer"
+          }
+        }
+      },
+      {
+        "id": "34030f8b-623d-4772-a8d0-1f4ad97e0607",
+        "name": "DB | Verify Canonical Deal",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1300,
+          -120
+        ],
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT\n  deal_id,\n  connector_key,\n  source_record_id,\n  deal_name,\n  amount,\n  trim(both FROM currency_code::text) AS currency_code,\n  stage_name,\n  stage_category,\n  sales_rep,\n  lead_source,\n  created_at,\n  expected_close_date,\n  closed_at,\n  source_updated_at,\n  contract_version,\n  ingested_at\nFROM reporting.deals\nWHERE connector_key = $1\n  AND source_record_id = $2\nLIMIT 1;",
+          "options": {
+            "queryReplacement": "={{ [ $('VAL | Normalize REST Deal').item.json.connector_key, $('VAL | Normalize REST Deal').item.json.source_record_id ] }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        }
+      },
+      {
+        "id": "6ca811c7-d2d5-4d76-b2e5-376f3deabc08",
+        "name": "AUD | Log Deal Ingested",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1560,
+          -120
+        ],
+        "alwaysOutputData": true,
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "INSERT INTO audit.agent_events (\n  event_id,\n  request_id,\n  correlation_id,\n  event_type,\n  stage,\n  actor,\n  payload\n)\nVALUES ($1,$2,$3,'deal_ingested','stage4','n8n_rest_connector',$4::jsonb);",
+          "options": {
+            "queryReplacement": "={{ [ 'EVT-' + $('VAL | Normalize REST Deal').item.json.request_id, $('VAL | Normalize REST Deal').item.json.request_id, $('VAL | Normalize REST Deal').item.json.correlation_id, JSON.stringify({ connector_key: $('DB | Verify Canonical Deal').item.json.connector_key, source_record_id: $('DB | Verify Canonical Deal').item.json.source_record_id, deal_id: $('DB | Verify Canonical Deal').item.json.deal_id, amount: $('DB | Verify Canonical Deal').item.json.amount, currency_code: $('DB | Verify Canonical Deal').item.json.currency_code, stage_category: $('DB | Verify Canonical Deal').item.json.stage_category }) ] }}"
+          }
+        },
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        }
+      },
+      {
+        "id": "ac6655fa-f70c-4d13-9bff-25f70b018609",
+        "name": "REP | Build Ingestion Success",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1820,
+          -120
+        ],
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const ctx = $('VAL | Normalize REST Deal').item.json;\nconst deal = $('DB | Verify Canonical Deal').item.json;\nconst ingest = $('DB | Ingest Canonical Deal').item.json;\n\nreturn {\n  status: 'success',\n  http_status: 200,\n  request_id: ctx.request_id,\n  correlation_id: ctx.correlation_id,\n  connector_key: ctx.connector_key,\n  source_record_id: ctx.source_record_id,\n  ingestion_status: ingest.ingestion_status ?? 'upserted',\n  canonical_deal: {\n    deal_id: deal.deal_id,\n    deal_name: deal.deal_name,\n    amount: deal.amount,\n    currency_code: deal.currency_code,\n    stage_name: deal.stage_name,\n    stage_category: deal.stage_category,\n    sales_rep: deal.sales_rep,\n    lead_source: deal.lead_source,\n    created_at: deal.created_at,\n    expected_close_date: deal.expected_close_date,\n    closed_at: deal.closed_at,\n    source_updated_at: deal.source_updated_at\n  }\n};"
+        }
+      },
+      {
+        "id": "d914654c-8d0b-42fa-aeb5-2605ffae2410",
+        "name": "DEL | Return Ingestion Success",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          2080,
+          -120
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {
+            "responseCode": "={{ $json.http_status }}"
+          }
+        }
+      },
+      {
+        "id": "a3bd539e-c9dc-46a8-af0c-5673cfed0c11",
+        "name": "REP | Build Ingestion Rejection",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1040,
+          160
+        ],
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "return {\n  status: 'rejected',\n  http_status: 400,\n  request_id: $json.request_id,\n  correlation_id: $json.correlation_id,\n  connector_key: $json.connector_key,\n  source_record_id: $json.source_record_id || null,\n  errors: $json.validation?.errors ?? [{code:'VALIDATION_FAILED', message:'Request validation failed'}]\n};"
+        }
+      },
+      {
+        "id": "46646839-44d9-41dc-b274-568107b3b612",
+        "name": "DEL | Return Ingestion Rejection",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.5,
+        "position": [
+          1300,
+          160
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ $json }}",
+          "options": {
+            "responseCode": "={{ $json.http_status }}"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "INT | Authenticated Deal Ingestion": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Runtime Governance",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Load Runtime Governance": {
+        "main": [
+          [
+            {
+              "node": "VAL | Normalize REST Deal",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Normalize REST Deal": {
+        "main": [
+          [
+            {
+              "node": "VAL | REST Payload Valid?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | REST Payload Valid?": {
+        "main": [
+          [
+            {
+              "node": "DB | Ingest Canonical Deal",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "REP | Build Ingestion Rejection",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Ingest Canonical Deal": {
+        "main": [
+          [
+            {
+              "node": "DB | Verify Canonical Deal",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Verify Canonical Deal": {
+        "main": [
+          [
+            {
+              "node": "AUD | Log Deal Ingested",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AUD | Log Deal Ingested": {
+        "main": [
+          [
+            {
+              "node": "REP | Build Ingestion Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Build Ingestion Success": {
+        "main": [
+          [
+            {
+              "node": "DEL | Return Ingestion Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Build Ingestion Rejection": {
+        "main": [
+          [
+            {
+              "node": "DEL | Return Ingestion Rejection",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false
+    },
+    "pinData": {},
+    "tags": []
+  }
+]
