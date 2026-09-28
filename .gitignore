@@ -20,6 +20,7 @@ n8n-data/
 
 # Local database / exports
 revint-powerbi-data.csv
+backups/
 *.dump
 *.sql.gz
 
