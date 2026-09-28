@@ -22,7 +22,8 @@
         "position": [
           0,
           0
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-OBS-01 | Runtime Observability\n\nNODE\nINT | Five-Minute Heartbeat\n\nNODE TYPE\nn8n-nodes-base.scheduleTrigger v1.2\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for Five-Minute Heartbeat.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nDB | Build Runtime Snapshot\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -46,7 +47,8 @@
             "id": "REVINTPGREPORTRO001",
             "name": "REVINT | Reporting RO"
           }
-        }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-OBS-01 | Runtime Observability\n\nNODE\nDB | Build Runtime Snapshot\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nPerforms the bounded governed database operation for Build Runtime Snapshot.\n\nUPSTREAM / INPUT\nINT | Five-Minute Heartbeat\n\nDOWNSTREAM / OUTPUT\nREP | Prepare Runtime Snapshot\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nDatabase access is through least-privilege credentials and bounded functions/queries.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -60,7 +62,8 @@
         "position": [
           520,
           0
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-OBS-01 | Runtime Observability\n\nNODE\nREP | Prepare Runtime Snapshot\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nResponse / Presentation\n\nPURPOSE\nBuilds the bounded response/presentation contract for Prepare Runtime Snapshot.\n\nUPSTREAM / INPUT\nDB | Build Runtime Snapshot\n\nDOWNSTREAM / OUTPUT\nAUD | Record Runtime Snapshot\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nBuilds bounded output only from previously governed facts.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -86,7 +89,8 @@
             "id": "REVINTPGAUDITWR001",
             "name": "REVINT | Audit Writer"
           }
-        }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-OBS-01 | Runtime Observability\n\nNODE\nAUD | Record Runtime Snapshot\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nAudit / Traceability\n\nPURPOSE\nRecords append-only audit or completion state for Record Runtime Snapshot.\n\nUPSTREAM / INPUT\nREP | Prepare Runtime Snapshot\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nAppend-only audit/completion responsibility is separated from reporting authority.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       }
     ],
     "connections": {

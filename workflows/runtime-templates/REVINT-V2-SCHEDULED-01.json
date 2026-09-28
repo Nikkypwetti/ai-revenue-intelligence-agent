@@ -24,7 +24,8 @@
         "position": [
           0,
           -100
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SCHEDULED-01 | Pipeline Intelligence\n\nNODE\nINT | Daily Schedule\n\nNODE TYPE\nn8n-nodes-base.scheduleTrigger v1.3\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for Daily Schedule.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nCTX | Daily Cadence\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -49,7 +50,8 @@
         "position": [
           0,
           140
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SCHEDULED-01 | Pipeline Intelligence\n\nNODE\nINT | Weekly Schedule\n\nNODE TYPE\nn8n-nodes-base.scheduleTrigger v1.3\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for Weekly Schedule.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nCTX | Weekly Cadence\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -62,7 +64,8 @@
         "position": [
           240,
           -100
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SCHEDULED-01 | Pipeline Intelligence\n\nNODE\nCTX | Daily Cadence\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nContext / Interpretation\n\nPURPOSE\nBuilds or normalizes bounded context for Daily Cadence.\n\nUPSTREAM / INPUT\nINT | Daily Schedule\n\nDOWNSTREAM / OUTPUT\nDB | Build Scheduled Intelligence\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nPrepares bounded context; it cannot authorize arbitrary database execution.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -75,7 +78,8 @@
         "position": [
           240,
           140
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SCHEDULED-01 | Pipeline Intelligence\n\nNODE\nCTX | Weekly Cadence\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nContext / Interpretation\n\nPURPOSE\nBuilds or normalizes bounded context for Weekly Cadence.\n\nUPSTREAM / INPUT\nINT | Weekly Schedule\n\nDOWNSTREAM / OUTPUT\nDB | Build Scheduled Intelligence\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nPrepares bounded context; it cannot authorize arbitrary database execution.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -101,7 +105,8 @@
         },
         "retryOnFail": true,
         "maxTries": 3,
-        "waitBetweenTries": 2000
+        "waitBetweenTries": 2000,
+        "notes": "WORKFLOW\nREVINT-V2-SCHEDULED-01 | Pipeline Intelligence\n\nNODE\nDB | Build Scheduled Intelligence\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nBuilds proactive stale-deal, missing-close-date, pipeline-movement and recent-won intelligence from governed data.\n\nUPSTREAM / INPUT\nCTX | Daily Cadence, CTX | Weekly Cadence\n\nDOWNSTREAM / OUTPUT\nREP | Prepare Intelligence Event\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nDatabase access is through least-privilege credentials and bounded functions/queries.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -114,7 +119,8 @@
         "position": [
           760,
           20
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SCHEDULED-01 | Pipeline Intelligence\n\nNODE\nREP | Prepare Intelligence Event\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nResponse / Presentation\n\nPURPOSE\nBuilds the bounded response/presentation contract for Prepare Intelligence Event.\n\nUPSTREAM / INPUT\nDB | Build Scheduled Intelligence\n\nDOWNSTREAM / OUTPUT\nAUD | Record Scheduled Intelligence\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nBuilds bounded output only from previously governed facts.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -140,7 +146,8 @@
         },
         "retryOnFail": true,
         "maxTries": 3,
-        "waitBetweenTries": 2000
+        "waitBetweenTries": 2000,
+        "notes": "WORKFLOW\nREVINT-V2-SCHEDULED-01 | Pipeline Intelligence\n\nNODE\nAUD | Record Scheduled Intelligence\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nAudit / Traceability\n\nPURPOSE\nRecords append-only audit or completion state for Record Scheduled Intelligence.\n\nUPSTREAM / INPUT\nREP | Prepare Intelligence Event\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nAppend-only audit/completion responsibility is separated from reporting authority.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       }
     ],
     "connections": {

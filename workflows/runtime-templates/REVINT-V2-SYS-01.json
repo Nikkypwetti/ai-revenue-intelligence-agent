@@ -13,7 +13,8 @@
         "position": [
           0,
           0
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SYS-01 | Runtime Reliability Handler\n\nNODE\nSYS | Workflow Error Trigger\n\nNODE TYPE\nn8n-nodes-base.errorTrigger v1\n\nLAYER\nReliability / System\n\nPURPOSE\nHandles bounded runtime/reliability behavior for Workflow Error Trigger.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nSYS | Normalize Terminal Failure\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nReliability logic is bounded, auditable, and cannot bypass business governance.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -26,7 +27,8 @@
         "position": [
           260,
           0
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SYS-01 | Runtime Reliability Handler\n\nNODE\nSYS | Normalize Terminal Failure\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nReliability / System\n\nPURPOSE\nHandles bounded runtime/reliability behavior for Normalize Terminal Failure.\n\nUPSTREAM / INPUT\nSYS | Workflow Error Trigger\n\nDOWNSTREAM / OUTPUT\nSYS | Record Failure + Dead Letter\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nReliability logic is bounded, auditable, and cannot bypass business governance.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -52,7 +54,8 @@
             "id": "REVINTPGAUDITWR001",
             "name": "REVINT | Audit Writer"
           }
-        }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-SYS-01 | Runtime Reliability Handler\n\nNODE\nSYS | Record Failure + Dead Letter\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nReliability / System\n\nPURPOSE\nPersists terminal failure, circuit and dead-letter state through the reliability gateway.\n\nUPSTREAM / INPUT\nSYS | Normalize Terminal Failure\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nReliability logic is bounded, auditable, and cannot bypass business governance.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       }
     ],
     "connections": {

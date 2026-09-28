@@ -22,7 +22,8 @@
         "position": [
           0,
           -100
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-HUBSPOT-01 | Incremental Deal Sync\n\nNODE\nINT | Fifteen-Minute HubSpot Sync\n\nNODE TYPE\nn8n-nodes-base.scheduleTrigger v1.2\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for Fifteen-Minute HubSpot Sync.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nDB | Load HubSpot Sync Context\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {},
@@ -33,7 +34,8 @@
         "position": [
           0,
           120
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-HUBSPOT-01 | Incremental Deal Sync\n\nNODE\nINT | Manual HubSpot Sync\n\nNODE TYPE\nn8n-nodes-base.manualTrigger v1\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for Manual HubSpot Sync.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nDB | Load HubSpot Sync Context\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -57,7 +59,8 @@
             "id": "REVINTPGREPORTRO001",
             "name": "REVINT | Reporting RO"
           }
-        }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-HUBSPOT-01 | Incremental Deal Sync\n\nNODE\nDB | Load HubSpot Sync Context\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nLoads connector activation, watermark, overlap window, currency and reliability/circuit state.\n\nUPSTREAM / INPUT\nINT | Fifteen-Minute HubSpot Sync, INT | Manual HubSpot Sync\n\nDOWNSTREAM / OUTPUT\nCTX | Build HubSpot Search\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nDatabase access is through least-privilege credentials and bounded functions/queries.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -71,7 +74,8 @@
         "position": [
           520,
           10
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-HUBSPOT-01 | Incremental Deal Sync\n\nNODE\nCTX | Build HubSpot Search\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nContext / Interpretation\n\nPURPOSE\nBuilds the bounded incremental HubSpot search window and pagination request from governed sync context.\n\nUPSTREAM / INPUT\nDB | Load HubSpot Sync Context\n\nDOWNSTREAM / OUTPUT\nVAL | Sync Allowed?\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nPrepares bounded context; it cannot authorize arbitrary database execution.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -105,7 +109,8 @@
         "position": [
           780,
           10
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-HUBSPOT-01 | Incremental Deal Sync\n\nNODE\nVAL | Sync Allowed?\n\nNODE TYPE\nn8n-nodes-base.if v2.3\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nApplies deterministic validation/routing for Sync Allowed?.\n\nUPSTREAM / INPUT\nCTX | Build HubSpot Search\n\nDOWNSTREAM / OUTPUT\nSRC | Fetch HubSpot Deals, SYS | Circuit Open \u2014 Skip Sync\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nFail-closed deterministic control; invalid or unsupported work must not continue.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -163,7 +168,8 @@
             "id": "REVINTHUBSPOTRO001",
             "name": "REVINT | HubSpot Deals RO"
           }
-        }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-HUBSPOT-01 | Incremental Deal Sync\n\nNODE\nSRC | Fetch HubSpot Deals\n\nNODE TYPE\nn8n-nodes-base.httpRequest v4.5\n\nLAYER\nSource Adapter\n\nPURPOSE\nReads HubSpot deals through the dedicated read-only Agent V2 credential.\n\nUPSTREAM / INPUT\nVAL | Sync Allowed?\n\nDOWNSTREAM / OUTPUT\nVAL | Normalize HubSpot Deals\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nExternal source access is adapter-specific and should be read-only where possible.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -177,7 +183,8 @@
         "position": [
           1300,
           -100
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-HUBSPOT-01 | Incremental Deal Sync\n\nNODE\nVAL | Normalize HubSpot Deals\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nMaps source records to the canonical deal contract and deterministically rejects invalid stage/currency/timestamp data.\n\nUPSTREAM / INPUT\nSRC | Fetch HubSpot Deals\n\nDOWNSTREAM / OUTPUT\nDB | Ingest HubSpot Batch\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nFail-closed deterministic control; invalid or unsupported work must not continue.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -203,7 +210,8 @@
             "id": "REVINTPGINGESTWR001",
             "name": "REVINT | Connector Writer"
           }
-        }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-HUBSPOT-01 | Incremental Deal Sync\n\nNODE\nDB | Ingest HubSpot Batch\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nWrites validated source records only through the canonical controlled ingestion gateway.\n\nUPSTREAM / INPUT\nVAL | Normalize HubSpot Deals\n\nDOWNSTREAM / OUTPUT\nAUD | Complete HubSpot Sync\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nDatabase access is through least-privilege credentials and bounded functions/queries.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -229,18 +237,20 @@
             "id": "REVINTPGAUDITWR001",
             "name": "REVINT | Audit Writer"
           }
-        }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-HUBSPOT-01 | Incremental Deal Sync\n\nNODE\nAUD | Complete HubSpot Sync\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nAudit / Traceability\n\nPURPOSE\nRecords completion and advances the incremental watermark only after the governed batch has completed.\n\nUPSTREAM / INPUT\nDB | Ingest HubSpot Batch\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nAppend-only audit/completion responsibility is separated from reporting authority.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {},
         "id": "hs10skip",
-        "name": "SYS | Circuit Open — Skip Sync",
+        "name": "SYS | Circuit Open \u2014 Skip Sync",
         "type": "n8n-nodes-base.noOp",
         "typeVersion": 1,
         "position": [
           1040,
           160
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-HUBSPOT-01 | Incremental Deal Sync\n\nNODE\nSYS | Circuit Open \u2014 Skip Sync\n\nNODE TYPE\nn8n-nodes-base.noOp v1\n\nLAYER\nReliability / System\n\nPURPOSE\nHandles bounded runtime/reliability behavior for Circuit Open \u2014 Skip Sync.\n\nUPSTREAM / INPUT\nVAL | Sync Allowed?\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nReliability logic is bounded, auditable, and cannot bypass business governance.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       }
     ],
     "connections": {
@@ -299,7 +309,7 @@
           ],
           [
             {
-              "node": "SYS | Circuit Open — Skip Sync",
+              "node": "SYS | Circuit Open \u2014 Skip Sync",
               "type": "main",
               "index": 0
             }

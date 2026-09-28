@@ -26,7 +26,8 @@
             "name": "REVINT | Report Header Auth"
           }
         },
-        "webhookId": "5d96a8b3-5db2-478d-bb12-c4fea6b39f47"
+        "webhookId": "5d96a8b3-5db2-478d-bb12-c4fea6b39f47",
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nINT | Authenticated Report Request\n\nNODE TYPE\nn8n-nodes-base.webhook v2.1\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for Authenticated Report Request.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nCTX | Interpret Report Request\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -39,7 +40,8 @@
         "position": [
           260,
           0
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nCTX | Interpret Report Request\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nContext / Interpretation\n\nPURPOSE\nInterprets natural-language or structured reporting intent into supported KPI, period, mode and approved filter fields.\n\nUPSTREAM / INPUT\nINT | Authenticated Report Request, CTX | Bind SSO Principal\n\nDOWNSTREAM / OUTPUT\nVAL | Intent Ready?\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nPrepares bounded context; it cannot authorize arbitrary database execution.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -73,7 +75,8 @@
         "position": [
           520,
           0
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nVAL | Intent Ready?\n\nNODE TYPE\nn8n-nodes-base.if v2.3\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nApplies deterministic validation/routing for Intent Ready?.\n\nUPSTREAM / INPUT\nCTX | Interpret Report Request\n\nDOWNSTREAM / OUTPUT\nDB | Execute Governed Metric, REP | Build Clarification Response\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nFail-closed deterministic control; invalid or unsupported work must not continue.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -99,7 +102,8 @@
         },
         "retryOnFail": true,
         "maxTries": 3,
-        "waitBetweenTries": 2000
+        "waitBetweenTries": 2000,
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nDB | Execute Governed Metric\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nExecutes the authorized KPI through the governed PostgreSQL Agent gateway; AI never supplies executable SQL.\n\nUPSTREAM / INPUT\nVAL | Intent Ready?\n\nDOWNSTREAM / OUTPUT\nREP | Build Report Response\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nDatabase access is through least-privilege credentials and bounded functions/queries.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -112,7 +116,8 @@
         "position": [
           1040,
           -120
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nREP | Build Report Response\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nResponse / Presentation\n\nPURPOSE\nBuilds the bounded response/presentation contract for Build Report Response.\n\nUPSTREAM / INPUT\nDB | Execute Governed Metric\n\nDOWNSTREAM / OUTPUT\nAUD | Log Report Result\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nBuilds bounded output only from previously governed facts.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -139,7 +144,8 @@
         },
         "retryOnFail": true,
         "maxTries": 3,
-        "waitBetweenTries": 2000
+        "waitBetweenTries": 2000,
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nAUD | Log Report Result\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nAudit / Traceability\n\nPURPOSE\nRecords append-only audit or completion state for Log Report Result.\n\nUPSTREAM / INPUT\nREP | Build Report Response\n\nDOWNSTREAM / OUTPUT\nDEL | Return Report Response\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nAppend-only audit/completion responsibility is separated from reporting authority.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -156,7 +162,8 @@
         "position": [
           1560,
           -120
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nDEL | Return Report Response\n\nNODE TYPE\nn8n-nodes-base.respondToWebhook v1.5\n\nLAYER\nDelivery\n\nPURPOSE\nReturns the approved delivery contract for Return Report Response.\n\nUPSTREAM / INPUT\nAUD | Log Report Result\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nReturns only approved response fields; no database authority is added here.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -169,7 +176,8 @@
         "position": [
           780,
           160
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nREP | Build Clarification Response\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nResponse / Presentation\n\nPURPOSE\nBuilds the bounded response/presentation contract for Build Clarification Response.\n\nUPSTREAM / INPUT\nVAL | Intent Ready?\n\nDOWNSTREAM / OUTPUT\nAUD | Log Clarification\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nBuilds bounded output only from previously governed facts.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -196,7 +204,8 @@
         },
         "retryOnFail": true,
         "maxTries": 3,
-        "waitBetweenTries": 2000
+        "waitBetweenTries": 2000,
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nAUD | Log Clarification\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nAudit / Traceability\n\nPURPOSE\nRecords append-only audit or completion state for Log Clarification.\n\nUPSTREAM / INPUT\nREP | Build Clarification Response\n\nDOWNSTREAM / OUTPUT\nDEL | Return Clarification\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nAppend-only audit/completion responsibility is separated from reporting authority.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -213,7 +222,8 @@
         "position": [
           1300,
           160
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nDEL | Return Clarification\n\nNODE TYPE\nn8n-nodes-base.respondToWebhook v1.5\n\nLAYER\nDelivery\n\nPURPOSE\nReturns the approved delivery contract for Return Clarification.\n\nUPSTREAM / INPUT\nAUD | Log Clarification\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nReturns only approved response fields; no database authority is added here.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -237,7 +247,8 @@
             "name": "REVINT | SSO Internal Header Auth"
           }
         },
-        "webhookId": "9d6bf3d1-c56d-4d0b-bd59-7f84a60a0a11"
+        "webhookId": "9d6bf3d1-c56d-4d0b-bd59-7f84a60a0a11",
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nINT | SSO Report Request\n\nNODE TYPE\nn8n-nodes-base.webhook v2.1\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for SSO Report Request.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nDB | Resolve SSO Principal\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -263,7 +274,8 @@
         },
         "retryOnFail": true,
         "maxTries": 3,
-        "waitBetweenTries": 2000
+        "waitBetweenTries": 2000,
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nDB | Resolve SSO Principal\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nResolves a trusted external SSO subject to the canonical governed principal used for RBAC.\n\nUPSTREAM / INPUT\nINT | SSO Report Request\n\nDOWNSTREAM / OUTPUT\nCTX | Bind SSO Principal\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nDatabase access is through least-privilege credentials and bounded functions/queries.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
       {
         "parameters": {
@@ -276,7 +288,8 @@
         "position": [
           520,
           360
-        ]
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nCTX | Bind SSO Principal\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nContext / Interpretation\n\nPURPOSE\nBinds the trusted resolved principal to the request so caller-supplied identity cannot override SSO identity.\n\nUPSTREAM / INPUT\nDB | Resolve SSO Principal\n\nDOWNSTREAM / OUTPUT\nCTX | Interpret Report Request\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nPrepares bounded context; it cannot authorize arbitrary database execution.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       }
     ],
     "connections": {
