@@ -7,7 +7,7 @@ A governed self-service revenue reporting system that turns manager questions in
 
 ## Agent v2 — deployable business edition
 
-Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent execution core, Scheduled Intelligence, the runtime Reliability core, and Monitoring & Observability are merged and locally verified. Backup & Recovery is also locally verified on the isolated Agent v2 deployment.
+Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent execution core, Scheduled Intelligence, the runtime Reliability core, Monitoring & Observability, and Backup & Recovery are merged and locally verified. Upgrade & Rollback controls are also locally verified on the isolated Agent v2 deployment.
 
 **Stage 1** provides the reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
 
@@ -31,9 +31,11 @@ Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent e
 
 **Backup & Recovery** adds atomic owner-only backups of both Agent v2 PostgreSQL databases and the n8n persistent data volume, SHA-256 integrity manifests, encryption-key fingerprint validation, isolated restore drills, a guarded live-restore path with mandatory pre-restore backup, 14-day local retention, and an idempotent daily cron schedule.
 
-See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), [identity/permissions documentation](docs/identity-permissions.md), [Agent execution-core documentation](docs/agent-execution-core.md), [Scheduled Intelligence documentation](docs/scheduled-intelligence.md), [Reliability documentation](docs/reliability-core.md), [Monitoring & Observability documentation](docs/observability-core.md), and [Backup & Recovery documentation](docs/backup-recovery.md).
+**Upgrade & Rollback** adds immutable digest-pinned runtime images, drift-detecting release checkpoints, checkpoint-first upgrades, PostgreSQL-major upgrade protection, health-gated deployment, exact-image rollback metadata, guarded rollback integration, and full post-change regression verification.
 
-> These stages are production-foundation work, not a claim of full production readiness. A live LLM intent adapter, external CRM/billing adapters, external Slack/email delivery and incident notifications, HTTPS/public ingress, external authentication/SSO, encrypted off-site backup replication, and upgrade/rollback controls remain later stages.
+See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), [identity/permissions documentation](docs/identity-permissions.md), [Agent execution-core documentation](docs/agent-execution-core.md), [Scheduled Intelligence documentation](docs/scheduled-intelligence.md), [Reliability documentation](docs/reliability-core.md), [Monitoring & Observability documentation](docs/observability-core.md), [Backup & Recovery documentation](docs/backup-recovery.md), and [Upgrade & Rollback documentation](docs/upgrade-rollback.md).
+
+> These stages are production-foundation work, not a claim of full production readiness. A live LLM intent adapter, external CRM/billing adapters, external Slack/email delivery and incident notifications, HTTPS/public ingress, external authentication/SSO, and encrypted off-site backup replication remain later stages.
 
 ## Business problem
 
