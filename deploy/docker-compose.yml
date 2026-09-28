@@ -2,7 +2,7 @@ name: ${COMPOSE_PROJECT_NAME:-revint-agent}
 
 services:
   n8n-db:
-    image: docker.io/library/postgres:${POSTGRES_VERSION:-16-alpine}
+    image: ${POSTGRES_IMAGE:?Set POSTGRES_IMAGE in deploy/.env}
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${N8N_DB_NAME:-n8n}
@@ -20,7 +20,7 @@ services:
       - agent_private
 
   reporting-db:
-    image: docker.io/library/postgres:${POSTGRES_VERSION:-16-alpine}
+    image: ${POSTGRES_IMAGE:?Set POSTGRES_IMAGE in deploy/.env}
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${REPORTING_DB_NAME:-revenue_reporting}
@@ -38,7 +38,7 @@ services:
       - agent_private
 
   n8n:
-    image: docker.io/n8nio/n8n:${N8N_VERSION:-2.35.7}
+    image: ${N8N_IMAGE:?Set N8N_IMAGE in deploy/.env}
     restart: unless-stopped
     depends_on:
       n8n-db:
