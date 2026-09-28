@@ -55,6 +55,7 @@ done
 [[ "$PUBLIC_HTTPS_ORIGIN" =~ ^https://[A-Za-z0-9.-]+(:[0-9]+)?$ ]] ||   fail "PUBLIC_HTTPS_ORIGIN must be an https origin without a path."
 [[ "$INGRESS_HTTP_PORT" =~ ^[0-9]+$ && "$INGRESS_HTTP_PORT" -ge 1 && "$INGRESS_HTTP_PORT" -le 65535 ]] ||   fail "INGRESS_HTTP_PORT must be between 1 and 65535."
 [[ "$INGRESS_HTTPS_PORT" =~ ^[0-9]+$ && "$INGRESS_HTTPS_PORT" -ge 1 && "$INGRESS_HTTPS_PORT" -le 65535 ]] ||   fail "INGRESS_HTTPS_PORT must be between 1 and 65535."
+[[ "${SSO_ENABLED:-false}" =~ ^(true|false)$ ]] || fail "SSO_ENABLED must be true or false."
 
 if [[ "$INGRESS_BIND_ADDRESS" != "127.0.0.1" && "$INGRESS_BIND_ADDRESS" != "::1" ]]; then
   [[ "$CONFIRM_PUBLIC" == "REVINT_PUBLIC_HTTPS_INGRESS" ]] || {

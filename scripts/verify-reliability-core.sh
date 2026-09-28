@@ -154,7 +154,7 @@ retry_state="$(psql_n8n -c "
     GROUP BY w.id
   ) s;
 ")"
-[[ "$retry_state" == "REVINTV2AGENTCORE01:3:3,REVINTV2OBS01:2:2,REVINTV2RESTINGEST01:4:4,REVINTV2SCHEDULED01:2:2" ]] || {
+[[ "$retry_state" == "REVINTV2AGENTCORE01:4:4,REVINTV2OBS01:2:2,REVINTV2RESTINGEST01:4:4,REVINTV2SCHEDULED01:2:2" ]] || {
   echo "FAIL: one or more safe PostgreSQL nodes lack the bounded retry policy."
   exit 1
 }
