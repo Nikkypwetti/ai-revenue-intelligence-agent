@@ -264,6 +264,9 @@ assert http["retryOnFail"] is True and http["maxTries"] == 3
 normalize = nodes["VAL | Normalize HubSpot Deals"]["parameters"]["jsCode"]
 for required in ("hs_is_closed_won", "hs_is_closed", "revint_stage_category"):
     assert required in normalize
+assert "const sourceCurrency = String(p.deal_currency_code ?? '').trim().toUpperCase();" in normalize
+assert "const currency = sourceCurrency || expectedCurrency;" in normalize
+assert "currency === expectedCurrency" in normalize
 
 batch = nodes["DB | Ingest HubSpot Batch"]["parameters"]["query"]
 assert "ingest_deal_batch_from_source" in batch
@@ -285,6 +288,60 @@ print("PASS: HubSpot workflow is bounded, credential-referenced, and disabled by
 print("PASS: current HubSpot API endpoint, pagination ceiling, and retry controls are present.")
 print("PASS: stage classification is deterministic and no secret is embedded in workflow JSON.")
 PY
+
+
+node - "$WORKFLOW" "$CLIENT_CURRENCY" <<'NODETEST'
+const fs = require('fs');
+const workflow = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'))[0];
+const expectedCurrency = process.argv[3];
+const normalize = workflow.nodes.find(n => n.name === 'VAL | Normalize HubSpot Deals').parameters.jsCode;
+const context = {
+  connector_key: 'hubspot_primary',
+  currency_code: expectedCurrency,
+  query_start_at: '2026-09-28T11:00:00.000Z',
+  query_end_at: '2026-09-28T12:00:00.000Z'
+};
+const records = [
+  {
+    id: 'currency-default',
+    properties: {
+      dealname: 'Default Currency',
+      amount: '100',
+      deal_currency_code: '',
+      dealstage: 'open-stage',
+      hs_lastmodifieddate: '2026-09-28T11:30:00.000Z',
+      createdate: '2026-09-28T10:00:00.000Z',
+      closedate: null,
+      hs_is_closed: false,
+      hs_is_closed_won: false
+    }
+  },
+  {
+    id: 'currency-conflict',
+    properties: {
+      dealname: 'Conflicting Currency',
+      amount: '200',
+      deal_currency_code: expectedCurrency === 'USD' ? 'EUR' : 'USD',
+      dealstage: 'open-stage',
+      hs_lastmodifieddate: '2026-09-28T11:40:00.000Z',
+      createdate: '2026-09-28T10:00:00.000Z',
+      closedate: null,
+      hs_is_closed: false,
+      hs_is_closed_won: false
+    }
+  }
+];
+const dollar = () => ({ first: () => ({ json: { sync_context: context } }) });
+const input = { all: () => [{ json: { results: records } }] };
+const result = new Function('$', '$input', normalize)(dollar, input)[0].json;
+if (result.record_count !== 1 || result.rejected_count !== 1) {
+  throw new Error('currency normalization counts are incorrect');
+}
+if (result.records[0].source_payload.deal_currency_code !== expectedCurrency) {
+  throw new Error('missing HubSpot currency did not fall back to governed currency');
+}
+console.log('PASS: missing HubSpot deal currency defaults to governed currency while explicit conflicts are rejected.');
+NODETEST
 
 for script in \
   "$ROOT_DIR/scripts/init-hubspot-connector.sh" \
