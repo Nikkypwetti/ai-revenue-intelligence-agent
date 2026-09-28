@@ -421,21 +421,7 @@ audit_count="$(psql_admin -c "
   exit 1
 }
 
-if ! ss -ltn | grep -qE ':5678[[:space:]]'; then
-  echo "FAIL: protected old local n8n listener on port 5678 is missing."
-  exit 1
-fi
-
-if ! ss -ltn | grep -qE '127\.0\.0\.1:5681|0\.0\.0\.0:5681|\[::\]:5681'; then
-  echo "FAIL: Agent v2 is not listening on port 5681."
-  exit 1
-fi
-
-health="$(curl -fsS --max-time 10 http://127.0.0.1:5681/healthz)"
-[[ "$health" == *'"status":"ok"'* ]] || {
-  echo "FAIL: Agent v2 health endpoint is not healthy."
-  exit 1
-}
+bash "$ROOT_DIR/scripts/verify-runtime-isolation.sh"
 
 echo "PASS: all protected PostgreSQL nodes use bounded three-attempt retries."
 echo "PASS: terminal failures route to the active Agent v2 reliability workflow."
@@ -446,7 +432,7 @@ echo "PASS: three terminal failures open the circuit and block execution."
 echo "PASS: expired circuits allow one half-open probe and block concurrent probes."
 echo "PASS: bounded success closes the circuit and resets failure count."
 echo "PASS: runtime audit writes are conflict-safe without broadening audit-writer table privileges."
-echo "PASS: old n8n port 5678 remains available and Agent v2 remains isolated on 5681."
+echo "PASS: Agent v2 runtime isolation verification passed."
 
 bash "$ROOT_DIR/scripts/verify-scheduled-intelligence.sh"
 

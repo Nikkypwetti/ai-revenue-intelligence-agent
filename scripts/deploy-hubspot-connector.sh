@@ -65,23 +65,76 @@ overlap="${HUBSPOT_SYNC_OVERLAP_SECONDS:-300}"
   exit 1
 }
 
+compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 tmp_config="$(mktemp)"
-trap 'rm -f "$tmp_config"' EXIT
-python3 - "$BASE_CONFIG" "$tmp_config" <<'PY'
+n8n_stopped=false
+
+cleanup() {
+  rm -f "$tmp_config"
+  if [[ "$n8n_stopped" == "true" ]]; then
+    "${compose[@]}" up -d n8n >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+set_connector_state() {
+  local state="$1"
+  python3 - "$BASE_CONFIG" "$tmp_config" "$state" <<'PYCONFIG'
 import json, sys
-src, dst = sys.argv[1:3]
+src, dst, state = sys.argv[1:4]
 doc = json.load(open(src))
 for connector in doc["connectors"]:
     if connector.get("connector_key") == "hubspot_primary":
-        connector["active"] = True
+        connector["active"] = state == "true"
 json.dump(doc, open(dst, "w"), indent=2)
-PY
+PYCONFIG
+  CONNECTOR_CONFIG_FILE="$tmp_config" bash "$ROOT_DIR/scripts/apply-connector-config.sh"
+}
 
+n8n_cli() {
+  "${compose[@]}" run --rm --no-deps -T n8n "$@"
+}
+
+import_publish() {
+  local file="$1"
+  local workflow_id="$2"
+  cat "$file" | "${compose[@]}" run --rm --no-deps -T n8n \
+    import:workflow --input=/dev/stdin
+  n8n_cli publish:workflow --id="$workflow_id"
+}
+
+# Keep governance closed until credentials and workflows are ready.
 bash "$ROOT_DIR/scripts/init-hubspot-connector.sh"
-CONNECTOR_CONFIG_FILE="$tmp_config" bash "$ROOT_DIR/scripts/apply-connector-config.sh"
-bash "$ROOT_DIR/scripts/import-hubspot-runtime-credential.sh"
+set_connector_state false
 
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T reporting-db \
+# n8n CLI mutation runs in isolated one-off containers while the long-running
+# Agent v2 process is stopped. This avoids concurrent CLI/runtime crashes and
+# gives the same deployment path for each client environment.
+"${compose[@]}" stop n8n
+n8n_stopped=true
+
+bash "$ROOT_DIR/scripts/import-hubspot-runtime-credential.sh"
+import_publish "$SYS_WORKFLOW" "REVINTV2SYSERROR01"
+import_publish "$WORKFLOW" "REVINTV2HUBSPOT01"
+
+"${compose[@]}" up -d n8n
+n8n_stopped=false
+
+port="${N8N_PORT:-5681}"
+for attempt in $(seq 1 30); do
+  if curl -fsS "http://127.0.0.1:$port/healthz" >/dev/null 2>&1; then
+    break
+  fi
+  [[ "$attempt" -ne 30 ]] || {
+    echo "FAIL: Agent v2 n8n did not become healthy."
+    exit 1
+  }
+  sleep 2
+done
+
+# Activate governance only after n8n is healthy and both workflows are published.
+set_connector_state true
+"${compose[@]}" exec -T reporting-db \
   psql -X -v ON_ERROR_STOP=1 -U "$REPORTING_DB_ADMIN_USER" -d "$REPORTING_DB_NAME" \
   -v lookback="$lookback" -v overlap="$overlap" <<'SQL'
 UPDATE governance.reliability_policy
@@ -103,32 +156,6 @@ ON CONFLICT (connector_key) DO UPDATE SET
   overlap_seconds=EXCLUDED.overlap_seconds,
   updated_at=now();
 SQL
-
-import_publish() {
-  local file="$1"
-  local workflow_id="$2"
-  cat "$file" | docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T n8n \
-    n8n import:workflow --input=/dev/stdin
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T n8n \
-    n8n publish:workflow --id="$workflow_id"
-}
-
-import_publish "$SYS_WORKFLOW" "REVINTV2SYSERROR01"
-import_publish "$WORKFLOW" "REVINTV2HUBSPOT01"
-
-docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up -d --force-recreate n8n
-
-port="${N8N_PORT:-5681}"
-for attempt in $(seq 1 30); do
-  if curl -fsS "http://127.0.0.1:$port/healthz" >/dev/null 2>&1; then
-    break
-  fi
-  [[ "$attempt" -ne 30 ]] || {
-    echo "FAIL: Agent v2 n8n did not become healthy."
-    exit 1
-  }
-  sleep 2
-done
 
 echo "PASS: HubSpot incremental sync activated with explicit confirmation."
 echo "PASS: Agent v2 is healthy; protected old n8n was not modified."

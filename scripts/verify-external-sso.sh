@@ -181,7 +181,7 @@ resolver_state="$(psql_admin -c "
 python3 - <<'PY'
 import json, os, urllib.error, urllib.request
 
-url = "http://127.0.0.1:5681/webhook/revint/v2/report-sso"
+url = f"http://127.0.0.1:{os.environ.get('N8N_PORT', '5681')}/webhook/revint/v2/report-sso"
 key = os.environ["SSO_INTERNAL_API_KEY"]
 
 def post(subject, internal_key, principal="verify-sso-admin"):

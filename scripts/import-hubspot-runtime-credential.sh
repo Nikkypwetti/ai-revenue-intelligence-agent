@@ -20,12 +20,12 @@ for name in "${required[@]}"; do
   fi
 done
 
-python3 - <<'PY' | docker compose \
-  --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T n8n \
-  n8n import:credentials --input=/dev/stdin
+compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+
+python3 - <<'PY' | "${compose[@]}" run --rm --no-deps -T n8n \
+  import:credentials --input=/dev/stdin
 import json
 import os
-
 credentials = [{
     "id": "REVINTHUBSPOTRO001",
     "name": "REVINT | HubSpot Deals RO",
@@ -37,8 +37,7 @@ credentials = [{
 print(json.dumps(credentials, separators=(",", ":")))
 PY
 
-credential_state="$(docker compose \
-  --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T n8n-db \
+credential_state="$("${compose[@]}" exec -T n8n-db \
   psql -X -q -A -t -U "$N8N_DB_USER" -d "$N8N_DB_NAME" -c "
     SELECT count(*) || '|' ||
            count(*) FILTER (WHERE data NOT LIKE '{%')

@@ -100,15 +100,14 @@ before="$(docker inspect -f '{{.Name}}|{{.Created}}|{{.Image}}'   "${COMPOSE_PRO
 after="$(docker inspect -f '{{.Name}}|{{.Created}}|{{.Image}}'   "${COMPOSE_PROJECT_NAME}-n8n-1"   "${COMPOSE_PROJECT_NAME}-n8n-db-1"   "${COMPOSE_PROJECT_NAME}-reporting-db-1")"
 [[ "$before" == "$after" ]] || fail "unchanged immutable image pins caused container recreation."
 
-ss -ltn | grep -q ':5678[[:space:]]' || fail "protected old n8n listener on 5678 is missing."
-ss -ltn | grep -q '127.0.0.1:5681[[:space:]]' || fail "Agent v2 listener on 5681 is missing."
+bash "$ROOT_DIR/scripts/verify-runtime-isolation.sh"
 
 echo "PASS: Compose and running containers use immutable image digests."
 echo "PASS: release checkpoint is checksum-protected, owner-only, and format 2."
 echo "PASS: upgrade dry-run and PostgreSQL-major guard passed."
 echo "PASS: rollback dry-run and confirmation guards passed."
 echo "PASS: unchanged immutable pins cause zero container recreation."
-echo "PASS: old n8n 5678 and Agent v2 5681 isolation remains intact."
+echo "PASS: Agent v2 runtime isolation verification passed."
 
 bash "$ROOT_DIR/scripts/verify-backup-recovery-stage.sh"
 

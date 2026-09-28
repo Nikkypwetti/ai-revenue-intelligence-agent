@@ -335,21 +335,7 @@ history_state="$(psql_reader -c "
   exit 1
 }
 
-if ! ss -ltn | grep -qE ':5678[[:space:]]'; then
-  echo "FAIL: protected old local n8n listener on port 5678 is missing."
-  exit 1
-fi
-
-if ! ss -ltn | grep -qE '127\.0\.0\.1:5681|0\.0\.0\.0:5681|\[::\]:5681'; then
-  echo "FAIL: Agent v2 is not listening on port 5681."
-  exit 1
-fi
-
-health="$(curl -fsS --max-time 10 http://127.0.0.1:5681/healthz)"
-[[ "$health" == *'"status":"ok"'* ]] || {
-  echo "FAIL: Agent v2 health endpoint is not healthy."
-  exit 1
-}
+bash "$ROOT_DIR/scripts/verify-runtime-isolation.sh"
 
 echo "PASS: component and overall runtime status surfaces are available."
 echo "PASS: reporting reader sees observability views without raw audit-table access."
@@ -358,7 +344,7 @@ echo "PASS: terminal failures drive deterministic degraded/blocked component sta
 echo "PASS: circuit, failure, and dead-letter conditions emit alert-ready rows."
 echo "PASS: runtime snapshot JSON includes component state and active alerts."
 echo "PASS: snapshot history is persisted through the existing Audit Writer boundary."
-echo "PASS: old n8n port 5678 remains available and Agent v2 remains isolated on 5681."
+echo "PASS: Agent v2 runtime isolation verification passed."
 
 bash "$ROOT_DIR/scripts/verify-reliability-core.sh"
 

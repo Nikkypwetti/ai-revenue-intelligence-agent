@@ -51,23 +51,29 @@ The adapter does not hard-code customer-specific HubSpot stage IDs for won/lost 
 
 The raw HubSpot `dealstage` value is retained as canonical `stage_name`. The derived `revint_stage_category` still passes through the existing governed value-mapping table before entering `reporting.deals`.
 
-## Current limitation
+## Reusable client deployment
 
-The connected ChatGPT HubSpot account can be inspected for schema verification, but its connector credential is not transferred into n8n. The local Agent v2 runtime therefore remains unactivated until a dedicated HubSpot private-app token is added to `deploy/.env`.
+The connector is designed to be reused as a per-client deployment, not as a shared credential or shared tenant. The code, database contract, KPI layer, reliability controls, observability, and workflow templates stay the same; each client environment supplies its own HubSpot read credential, business currency, connector configuration, identity mappings, and network settings.
 
 Recommended private values:
 
 ```bash
 HUBSPOT_SYNC_ENABLED=false
-HUBSPOT_PRIVATE_APP_TOKEN=CHANGE_ME_USE_A_PRIVATE_APP_TOKEN
+HUBSPOT_PRIVATE_APP_TOKEN=CHANGE_ME_USE_A_READ_ONLY_SERVICE_KEY_OR_PRIVATE_APP_TOKEN
 HUBSPOT_INITIAL_LOOKBACK_DAYS=30
 HUBSPOT_SYNC_OVERLAP_SECONDS=300
+EGRESS_DNS_PRIMARY=1.1.1.1
+EGRESS_DNS_SECONDARY=8.8.8.8
 ```
 
-To activate only after the token is configured:
+The `HUBSPOT_PRIVATE_APP_TOKEN` variable name is retained for compatibility with the existing n8n credential type; it may hold a supported HubSpot read-only Service Key. For client networks, override the egress DNS values with the client's approved DNS resolvers when public resolvers are inappropriate.
+
+Deployment is fail-closed. The script keeps connector governance disabled while it imports the encrypted credential and publishes workflows in isolated one-off n8n CLI containers. The long-running Agent v2 n8n service is restarted and health-checked before connector and reliability policies are enabled.
+
+To activate only after the client's credential, currency, deal fields, and expected sync window have been reviewed:
 
 ```bash
 bash scripts/deploy-hubspot-connector.sh --confirm REVINT_HUBSPOT_CONNECTOR
 ```
 
-Do not run the activation command with a production CRM until the account's currency, deal fields, and expected sync window have been reviewed.
+A live read-only HubSpot source has been used to validate this deployment path. Repository defaults remain disabled and no client credential is committed.
