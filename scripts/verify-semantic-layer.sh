@@ -44,10 +44,11 @@ semantic_counts="$(psql_admin -c "
         AND calculation_type IS NOT NULL
         AND formula_expression IS NOT NULL);
 ")"
-[[ "$semantic_counts" == "3|3|4|4" ]] || {
-  echo "FAIL: semantic catalog counts are not 3 dimensions, 3 date fields, 4 filters, 4 formulas."
+IFS='|' read -r dimension_count date_count filter_count formula_count <<< "$semantic_counts"
+if (( dimension_count < 3 || date_count < 3 || filter_count < 4 || formula_count < 4 )); then
+  echo "FAIL: semantic catalog dropped below the verified baseline."
   exit 1
-}
+fi
 
 mapping_state="$(psql_admin -c "
   SELECT
@@ -103,6 +104,13 @@ filter_drift="$(psql_admin -c "
   exit 1
 }
 
+active_kpi_count="$(psql_admin -c "
+  SELECT count(*)
+  FROM governance.kpi_catalog
+  WHERE active
+    AND calculation_type IS NOT NULL
+    AND formula_expression IS NOT NULL;
+")"
 contract_count="$(psql_admin -c "
   SELECT count(*)
   FROM governance.kpi_catalog k
@@ -114,7 +122,7 @@ contract_count="$(psql_admin -c "
     AND k.calculation_type IS NOT NULL
     AND k.formula_expression IS NOT NULL;
 ")"
-[[ "$contract_count" == "4" ]] || {
+[[ "$contract_count" == "$active_kpi_count" ]] || {
   echo "FAIL: active KPIs do not fully resolve to query/date/formula contracts."
   exit 1
 }
@@ -139,12 +147,12 @@ resolved_count="$(psql_admin -c "
 
 resolver_state="$(psql_admin -c "
   SELECT calculation_type || '|' || default_date_column || '|' ||
-         array_to_string(allowed_dimensions,',') || '|' ||
-         array_to_string(allowed_filters,',')
+         (ARRAY['deal_stage','lead_source','sales_rep']::text[] <@ allowed_dimensions)::int || '|' ||
+         (ARRAY['date_range','deal_stage','lead_source','sales_rep']::text[] <@ allowed_filters)::int
   FROM governance.resolve_kpi_semantics('open_pipeline',1);
 ")"
-[[ "$resolver_state" == "sum|expected_close_date|deal_stage,lead_source,sales_rep|date_range,deal_stage,lead_source,sales_rep" ]] || {
-  echo "FAIL: open_pipeline semantic resolution is not deterministic."
+[[ "$resolver_state" == "sum|expected_close_date|1|1" ]] || {
+  echo "FAIL: open_pipeline semantic baseline is not deterministic."
   exit 1
 }
 
@@ -200,7 +208,7 @@ END
 $$;
 SQL
 
-echo "PASS: four KPI formulas resolve through active approved query templates."
+echo "PASS: all active KPI formulas resolve through active approved query templates."
 echo "PASS: semantic dimensions, filters, and date fields map to canonical columns."
 echo "PASS: normalized KPI policies match the existing allowed dimension/filter arrays."
 echo "PASS: reporting reader can resolve semantic metadata but cannot modify it."

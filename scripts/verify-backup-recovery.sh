@@ -104,12 +104,15 @@ reporting_state="$("${compose[@]}" exec -T reporting-db   psql -X -q -A -t -U "$
       (to_regclass('reporting.deals') IS NOT NULL)::int || '|' ||
       (to_regclass('audit.agent_events') IS NOT NULL)::int || '|' ||
       (to_regclass('observability.component_status') IS NOT NULL)::int || '|' ||
-      (SELECT count(*) FROM governance.kpi_catalog WHERE active);
+      (SELECT count(*) FROM governance.kpi_catalog WHERE active) || '|' ||
+      (SELECT count(*) FROM governance.kpi_catalog
+       WHERE active AND kpi_key IN ('closed_won_revenue','open_pipeline','closed_won_deals','win_rate'));
   ")"
 
-IFS='|' read -r kpi_table deals_table audit_table obs_view active_kpis <<< "$reporting_state"
+IFS='|' read -r kpi_table deals_table audit_table obs_view active_kpis core_active_kpis <<< "$reporting_state"
 [[ "$kpi_table" == "1" && "$deals_table" == "1" && "$audit_table" == "1" && "$obs_view" == "1" ]] ||   fail "restored reporting database is missing governed runtime objects."
-[[ "$active_kpis" == "4" ]] || fail "restored KPI catalogue does not contain four active KPIs."
+[[ "$active_kpis" =~ ^[0-9]+$ && "$active_kpis" -ge 4 ]] || fail "restored KPI catalogue does not contain an active governed KPI catalogue."
+[[ "$core_active_kpis" == "4" ]] || fail "restored KPI catalogue does not preserve the original four core KPIs."
 
 mkdir -p "$tmpdir/n8n-data"
 tar -xzf "$BACKUP_PATH/$n8n_data_archive" -C "$tmpdir/n8n-data"
@@ -117,6 +120,6 @@ tar -xzf "$BACKUP_PATH/$n8n_data_archive" -C "$tmpdir/n8n-data"
 
 echo "PASS: checksums and encryption-key fingerprint verified."
 echo "PASS: n8n PostgreSQL backup restored into isolated verification database."
-echo "PASS: reporting PostgreSQL backup restored with governed schemas and four active KPIs."
+echo "PASS: reporting PostgreSQL backup restored with governed schemas, the active KPI catalogue, and the original four core KPIs."
 echo "PASS: n8n data archive is path-safe and extractable."
 echo "PASS: backup recovery verification passed."

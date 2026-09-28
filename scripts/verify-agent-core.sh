@@ -296,9 +296,17 @@ status, body = post({
     "principal_key":"verify-agent-manager",
     "question":"How is pipeline by sales rep this month?"
 })
-codes = [q.get("code") for q in body.get("questions",[])]
-if status != 422 or body.get("status") != "clarification_required" or "BREAKDOWN_NOT_ENABLED" not in codes:
-    raise SystemExit(f"FAIL: breakdown clarification response was {status} {body}")
+report = body.get("report",{})
+rows = report.get("current_period",{}).get("rows") or []
+row_map = {row.get("dimension_value"): float(row.get("value")) for row in rows}
+if (
+    status != 200 or body.get("status") != "success" or
+    report.get("report_type") != "breakdown" or
+    report.get("dimensions") != ["sales_rep"] or
+    row_map.get("Verify Agent Rep A") != 1000.0 or
+    row_map.get("Verify Agent Rep B") != 2000.0
+):
+    raise SystemExit(f"FAIL: sales-rep pipeline breakdown was {status} {body}")
 
 status, body = post({
     "principal_key":"verify-agent-rep-a",
@@ -318,7 +326,7 @@ if status != 403 or body.get("status") != "rejected":
 print("PASS: authenticated natural-language KPI request respects own data scope.")
 print("PASS: comparison request returns deterministic current/previous analysis.")
 print("PASS: structured intent applies an approved governed filter.")
-print("PASS: ambiguous breakdown and missing-period requests return clarification.")
+print("PASS: governed one-dimension breakdown executes and missing-period requests still clarify.")
 print("PASS: unauthorized own-scope identity is rejected.")
 print("PASS: unauthenticated report requests are rejected before workflow execution.")
 PY
@@ -342,13 +350,18 @@ permission_state="$(psql_admin -c "
       'governance.execute_agent_metric_request(text,text,text,text,jsonb,timestamptz)',
       'EXECUTE'
     )::int || '|' ||
+    has_function_privilege(
+      '$REPORTING_DB_READER_USER',
+      'governance.execute_agent_report_request_v2(text,text,text,text,jsonb,jsonb,timestamptz)',
+      'EXECUTE'
+    )::int || '|' ||
     has_table_privilege(
       '$REPORTING_DB_READER_USER',
       'governance.principal_registry',
       'SELECT'
     )::int;
 ")"
-[[ "$permission_state" == "1|0" ]] || {
+[[ "$permission_state" == "1|1|0" ]] || {
   echo "FAIL: reporting-reader Agent core privilege boundary is incorrect."
   exit 1
 }

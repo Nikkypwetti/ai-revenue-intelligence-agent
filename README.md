@@ -43,6 +43,10 @@ See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 doc
 
 > These stages are production-foundation work, not a claim of full production readiness. A live LLM intent adapter, additional CRM/billing adapters (such as Salesforce/Airtable), external Slack/email delivery and incident notifications, encrypted off-site backup replication, activation on a real public domain with a trusted production certificate, and an end-to-end login against the client's real identity provider remain later deployment work. The HubSpot connector is live-validated locally but each client deployment still requires its own read-only credential, mapping/configuration review, and isolated environment.
 
+## Revenue Question Pack
+
+- [37 governed KPIs and reusable data-domain model](docs/revenue-question-pack-v2.md)
+
 ## Business problem
 
 Revenue and operations managers often need quick answers about revenue, pipeline, deal stages, lead sources, and sales performance. A naive AI-to-database design can make those answers faster, but it can also introduce arbitrary SQL execution, inconsistent KPI definitions, unsupported filters, and weak auditability.
