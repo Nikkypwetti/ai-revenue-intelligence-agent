@@ -16,6 +16,10 @@ HubSpot Deals API
 
 The adapter never grants HubSpot permission to write CRM records. Agent v2 uses only a HubSpot private-app token with the minimum deal-read scope required for the source account.
 
+### Currency normalization
+
+The connector uses the governed business currency from Agent v2 as the deterministic default when HubSpot omits deal_currency_code. This covers deals stored in the account's default company currency without inventing a second currency value. If HubSpot supplies an explicit currency, it must still match the governed business currency or the record is rejected.
+
 ## Safe default
 
 The committed connector template has `active=false`. The n8n workflow also has `active=false`.
