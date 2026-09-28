@@ -7,7 +7,7 @@ A governed self-service revenue reporting system that turns manager questions in
 
 ## Agent v2 — deployable business edition
 
-Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent execution core, Scheduled Intelligence, the runtime Reliability core, Monitoring & Observability, and Backup & Recovery are merged and locally verified. Upgrade & Rollback controls are also locally verified on the isolated Agent v2 deployment.
+Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent execution core, Scheduled Intelligence, the runtime Reliability core, Monitoring & Observability, Backup & Recovery, and Upgrade & Rollback are merged and locally verified. HTTPS & Public Ingress controls are also locally verified on the isolated Agent v2 deployment.
 
 **Stage 1** provides the reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
 
@@ -33,9 +33,11 @@ Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent e
 
 **Upgrade & Rollback** adds immutable digest-pinned runtime images, drift-detecting release checkpoints, checkpoint-first upgrades, PostgreSQL-major upgrade protection, health-gated deployment, exact-image rollback metadata, guarded rollback integration, and full post-change regression verification.
 
-See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), [identity/permissions documentation](docs/identity-permissions.md), [Agent execution-core documentation](docs/agent-execution-core.md), [Scheduled Intelligence documentation](docs/scheduled-intelligence.md), [Reliability documentation](docs/reliability-core.md), [Monitoring & Observability documentation](docs/observability-core.md), [Backup & Recovery documentation](docs/backup-recovery.md), and [Upgrade & Rollback documentation](docs/upgrade-rollback.md).
+**HTTPS & Public Ingress** adds a digest-pinned nginx TLS edge, HTTP-to-HTTPS redirect, one-hop trusted-proxy handling, exact webhook-route allowlisting, editor/UI blocking, a read-only non-privileged ingress container, private/public Docker network separation, and an explicit confirmation guard before any non-loopback bind.
 
-> These stages are production-foundation work, not a claim of full production readiness. A live LLM intent adapter, external CRM/billing adapters, external Slack/email delivery and incident notifications, HTTPS/public ingress, external authentication/SSO, and encrypted off-site backup replication remain later stages.
+See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), [identity/permissions documentation](docs/identity-permissions.md), [Agent execution-core documentation](docs/agent-execution-core.md), [Scheduled Intelligence documentation](docs/scheduled-intelligence.md), [Reliability documentation](docs/reliability-core.md), [Monitoring & Observability documentation](docs/observability-core.md), [Backup & Recovery documentation](docs/backup-recovery.md), [Upgrade & Rollback documentation](docs/upgrade-rollback.md), and [HTTPS & Public Ingress documentation](docs/https-ingress.md).
+
+> These stages are production-foundation work, not a claim of full production readiness. A live LLM intent adapter, external CRM/billing adapters, external Slack/email delivery and incident notifications, external authentication/SSO, encrypted off-site backup replication, and activation on a real public domain with a trusted production certificate remain later deployment work.
 
 ## Business problem
 
