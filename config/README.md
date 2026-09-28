@@ -29,6 +29,8 @@ Stage 3 stores non-secret connector metadata in:
 
 Use `config/connectors.example.json` as the public template.
 
+The first external CRM adapter also has a focused public template at `config/hubspot-connector.example.json`. It is intentionally inactive in Git; live activation is handled by the guarded HubSpot deployment script.
+
 For a real client, create `config/connectors.local.json`. That file is ignored by Git and can be applied with:
 
 ```bash

@@ -1,0 +1,351 @@
+[
+  {
+    "id": "REVINTV2HUBSPOT01",
+    "name": "REVINT-V2-HUBSPOT-01 | Incremental Deal Sync",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 15
+              }
+            ]
+          }
+        },
+        "id": "hs01schedule",
+        "name": "INT | Fifteen-Minute HubSpot Sync",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -100
+        ]
+      },
+      {
+        "parameters": {},
+        "id": "hs02manual",
+        "name": "INT | Manual HubSpot Sync",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          120
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.get_connector_sync_context('hubspot_primary') AS sync_context;",
+          "options": {}
+        },
+        "id": "hs03context",
+        "name": "DB | Load HubSpot Sync Context",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          260,
+          10
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const raw = $('DB | Load HubSpot Sync Context').item.json.sync_context;\nconst ctx = typeof raw === 'string' ? JSON.parse(raw) : raw;\nif (!ctx || ctx.connector_key !== 'hubspot_primary') {\n  throw new Error('HUBSPOT_SYNC_CONTEXT_INVALID');\n}\nlet gate = ctx.reliability_gate;\nif (typeof gate === 'string') {\n  gate = JSON.parse(gate);\n}\nconst allowed = gate?.allowed === true;\nreturn {\n  sync_context: ctx,\n  should_sync: allowed,\n  skip_reason: allowed ? null : 'RELIABILITY_CIRCUIT_OPEN',\n  search_body: {\n    filterGroups: [{\n      filters: [\n        { propertyName: 'hs_lastmodifieddate', operator: 'GTE', value: String(ctx.query_start_ms) },\n        { propertyName: 'hs_lastmodifieddate', operator: 'LTE', value: String(ctx.query_end_ms) }\n      ]\n    }],\n    sorts: ['hs_lastmodifieddate'],\n    properties: [\n      'dealname','amount','deal_currency_code','dealstage','hubspot_owner_id',\n      'hs_analytics_source','createdate','closedate','hs_lastmodifieddate',\n      'hs_is_closed','hs_is_closed_won'\n    ],\n    limit: 200\n  }\n};"
+        },
+        "id": "hs04request",
+        "name": "CTX | Build HubSpot Search",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          10
+        ]
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "hs-allowed",
+                "leftValue": "={{ $json.should_sync }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "hs05if",
+        "name": "VAL | Sync Allowed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          780,
+          10
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.hubapi.com/crm/objects/2026-03/deals/search",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "hubspotAppToken",
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ $json.search_body }}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json",
+                "neverError": false,
+                "fullResponse": false
+              }
+            },
+            "pagination": {
+              "pagination": {
+                "paginationMode": "updateAParameterInEachRequest",
+                "parameters": {
+                  "parameters": [
+                    {
+                      "type": "body",
+                      "name": "after",
+                      "value": "={{ $response.body?.paging?.next?.after }}"
+                    }
+                  ]
+                },
+                "paginationCompleteWhen": "other",
+                "completeExpression": "={{ !$response.body?.paging?.next?.after }}",
+                "limitPagesFetched": true,
+                "maxRequests": 50,
+                "requestInterval": 1100
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "id": "hs06api",
+        "name": "SRC | Fetch HubSpot Deals",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.5,
+        "position": [
+          1040,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "hubspotAppToken": {
+            "id": "REVINTHUBSPOTRO001",
+            "name": "REVINT | HubSpot Deals RO"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const contextRaw = $('DB | Load HubSpot Sync Context').first().json.sync_context;\nconst ctx = typeof contextRaw === 'string' ? JSON.parse(contextRaw) : contextRaw;\nconst pages = $input.all().map(item => item.json ?? {});\nconst results = pages.flatMap(page => Array.isArray(page.results) ? page.results : []);\nif (results.length > 10000) throw new Error('HUBSPOT_SYNC_RESULT_LIMIT_EXCEEDED');\n\nconst expectedCurrency = String(ctx.currency_code ?? '').trim().toUpperCase();\nconst records = [];\nlet rejectedCount = 0;\nlet earliestRejectedAt = null;\n\nconst parseDate = value => {\n  if (value === null || value === undefined || value === '') return null;\n  const d = new Date(value);\n  return Number.isNaN(d.getTime()) ? null : d.toISOString();\n};\nconst asBool = value => value === true || String(value).toLowerCase() === 'true';\n\nfor (const record of results) {\n  const p = record?.properties ?? {};\n  const sourceRecordId = String(record?.id ?? '').trim();\n  const amount = Number(p.amount);\n  const currency = String(p.deal_currency_code ?? '').trim().toUpperCase();\n  const stageName = String(p.dealstage ?? '').trim();\n  const updatedAt = parseDate(p.hs_lastmodifieddate);\n  const createdAt = parseDate(p.createdate);\n  const closeDate = parseDate(p.closedate);\n  const isWon = asBool(p.hs_is_closed_won);\n  const isClosed = asBool(p.hs_is_closed);\n  const stageCategory = isWon ? 'won' : (isClosed ? 'lost' : 'open');\n\n  const valid =\n    sourceRecordId.length > 0 && sourceRecordId.length <= 200 &&\n    Number.isFinite(amount) && amount >= 0 &&\n    /^[A-Z]{3}$/.test(currency) && currency === expectedCurrency &&\n    stageName.length > 0 &&\n    updatedAt !== null &&\n    (stageCategory === 'open' || closeDate !== null);\n\n  if (!valid) {\n    rejectedCount += 1;\n    const candidate = updatedAt ? new Date(updatedAt).getTime() : null;\n    if (candidate !== null && (earliestRejectedAt === null || candidate < earliestRejectedAt)) {\n      earliestRejectedAt = candidate;\n    }\n    continue;\n  }\n\n  records.push({\n    source_record_id: sourceRecordId,\n    source_payload: {\n      dealname: p.dealname ?? null,\n      amount: String(amount),\n      deal_currency_code: currency,\n      dealstage: stageName,\n      hubspot_owner_id: p.hubspot_owner_id ?? null,\n      hs_analytics_source: p.hs_analytics_source ?? null,\n      createdate: createdAt,\n      closedate: closeDate,\n      hs_lastmodifieddate: updatedAt,\n      revint_stage_category: stageCategory\n    }\n  });\n}\n\nconst queryStart = new Date(ctx.query_start_at).getTime();\nconst queryEnd = new Date(ctx.query_end_at).getTime();\nlet watermarkMs = queryEnd;\nif (rejectedCount > 0) {\n  watermarkMs = earliestRejectedAt === null ? queryStart : Math.max(queryStart, earliestRejectedAt);\n}\n\nreturn [{\n  json: {\n    connector_key: 'hubspot_primary',\n    query_start_at: new Date(queryStart).toISOString(),\n    query_end_at: new Date(queryEnd).toISOString(),\n    watermark: new Date(watermarkMs).toISOString(),\n    source_count: results.length,\n    record_count: records.length,\n    rejected_count: rejectedCount,\n    records,\n    event_id: 'HUBSPOT-SYNC-' + String(queryEnd)\n  }\n}];"
+        },
+        "id": "hs07normalize",
+        "name": "VAL | Normalize HubSpot Deals",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          -100
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT ingestion.ingest_deal_batch_from_source($1,$2::jsonb) AS batch_result;",
+          "options": {
+            "queryReplacement": "={{ [ $json.connector_key, JSON.stringify($json.records) ] }}"
+          }
+        },
+        "id": "hs08batch",
+        "name": "DB | Ingest HubSpot Batch",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1560,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGINGESTWR001",
+            "name": "REVINT | Connector Writer"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_connector_sync_completion($1,$2,$3::timestamptz,$4::timestamptz,$5::timestamptz,$6::integer,$7::integer,$8::integer) AS sync_result;",
+          "options": {
+            "queryReplacement": "={{ [ $('VAL | Normalize HubSpot Deals').item.json.event_id, $('VAL | Normalize HubSpot Deals').item.json.connector_key, $('VAL | Normalize HubSpot Deals').item.json.query_start_at, $('VAL | Normalize HubSpot Deals').item.json.query_end_at, $('VAL | Normalize HubSpot Deals').item.json.watermark, $('VAL | Normalize HubSpot Deals').item.json.source_count, $('VAL | Normalize HubSpot Deals').item.json.record_count, $('VAL | Normalize HubSpot Deals').item.json.rejected_count ] }}"
+          }
+        },
+        "id": "hs09audit",
+        "name": "AUD | Complete HubSpot Sync",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1820,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        }
+      },
+      {
+        "parameters": {},
+        "id": "hs10skip",
+        "name": "SYS | Circuit Open — Skip Sync",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1040,
+          160
+        ]
+      }
+    ],
+    "connections": {
+      "INT | Fifteen-Minute HubSpot Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load HubSpot Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "INT | Manual HubSpot Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load HubSpot Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Load HubSpot Sync Context": {
+        "main": [
+          [
+            {
+              "node": "CTX | Build HubSpot Search",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Build HubSpot Search": {
+        "main": [
+          [
+            {
+              "node": "VAL | Sync Allowed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Sync Allowed?": {
+        "main": [
+          [
+            {
+              "node": "SRC | Fetch HubSpot Deals",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "SYS | Circuit Open — Skip Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SRC | Fetch HubSpot Deals": {
+        "main": [
+          [
+            {
+              "node": "VAL | Normalize HubSpot Deals",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Normalize HubSpot Deals": {
+        "main": [
+          [
+            {
+              "node": "DB | Ingest HubSpot Batch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Ingest HubSpot Batch": {
+        "main": [
+          [
+            {
+              "node": "AUD | Complete HubSpot Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "pinData": {},
+    "tags": []
+  }
+]
