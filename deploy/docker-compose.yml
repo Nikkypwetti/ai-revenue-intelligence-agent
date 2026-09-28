@@ -61,6 +61,7 @@ services:
       N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
       N8N_WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://localhost:5678/}
       N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL:-http://localhost:5678/}
+      N8N_PROXY_HOPS: ${N8N_PROXY_HOPS:-1}
       GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Etc/UTC}
       TZ: ${TZ:-Etc/UTC}
 
@@ -92,6 +93,53 @@ services:
       - agent_private
       - agent_egress
 
+  ingress:
+    profiles: ["ingress"]
+    image: ${NGINX_IMAGE:?Set NGINX_IMAGE in deploy/.env}
+    restart: unless-stopped
+    depends_on:
+      n8n:
+        condition: service_healthy
+    ports:
+      - "${INGRESS_BIND_ADDRESS:-127.0.0.1}:${INGRESS_HTTP_PORT:-8080}:8080"
+      - "${INGRESS_BIND_ADDRESS:-127.0.0.1}:${INGRESS_HTTPS_PORT:-8443}:8443"
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-localhost}
+      PUBLIC_HTTPS_ORIGIN: ${PUBLIC_HTTPS_ORIGIN:-https://localhost:8443}
+      NGINX_ENVSUBST_FILTER: "^(PUBLIC_DOMAIN|PUBLIC_HTTPS_ORIGIN)$"
+    volumes:
+      - ./nginx/revint.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./tls/tls.crt:/etc/nginx/tls/tls.crt:ro
+      - ./tls/tls.key:/etc/nginx/tls/tls.key:ro
+    read_only: true
+    tmpfs:
+      - /etc/nginx/conf.d
+      - /var/cache/nginx
+      - /var/run
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_READ_SEARCH
+      - SETGID
+      - SETUID
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1:8081/healthz | grep -qx ok",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+    networks:
+      - agent_private
+      - ingress_public
+
 volumes:
   n8n_data:
   n8n_db_data:
@@ -101,3 +149,4 @@ networks:
   agent_private:
     internal: true
   agent_egress:
+  ingress_public:

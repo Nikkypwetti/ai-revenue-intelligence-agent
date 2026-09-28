@@ -31,6 +31,11 @@ if [[ "${POSTGRES_IMAGE:-}" != *@sha256:* ]]; then
   exit 1
 fi
 
+if [[ "${NGINX_IMAGE:-}" != *@sha256:* ]]; then
+  echo "FAIL: NGINX_IMAGE must use an immutable sha256 digest."
+  exit 1
+fi
+
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config --quiet
 
 echo "PASS: Docker Compose configuration is valid, secrets are populated, and runtime images are digest-pinned."
