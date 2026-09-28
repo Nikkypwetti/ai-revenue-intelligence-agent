@@ -100,8 +100,7 @@ nginx_config="$("${compose[@]}" --profile ingress exec -T ingress nginx -T 2>&1)
 grep -q 'ssl_protocols TLSv1.2 TLSv1.3;' <<<"$nginx_config" || fail "TLS protocol floor is not TLS 1.2."
 [[ "$(grep -c 'proxy_pass http://n8n:5678;' <<<"$nginx_config")" -eq 2 ]] ||   fail "ingress exposes an unexpected number of n8n proxy routes."
 
-ss -ltn | grep -q ':5678[[:space:]]' || fail "protected old n8n listener on 5678 is missing."
-ss -ltn | grep -q '127.0.0.1:5681[[:space:]]' || fail "Agent v2 backend listener on 5681 is missing."
+bash "$ROOT_DIR/scripts/verify-runtime-isolation.sh"
 
 cp "$ENV_FILE" "$guard_env"
 python3 - "$guard_env" <<'PY'
@@ -146,7 +145,7 @@ echo "PASS: n8n editor/signin surfaces remain blocked at the ingress boundary."
 echo "PASS: header authentication and governed validation survive the TLS proxy."
 echo "PASS: TLS is limited to 1.2/1.3 and security headers are configured."
 echo "PASS: non-loopback public binding requires the explicit confirmation token."
-echo "PASS: old n8n 5678 and Agent v2 backend 5681 remain available."
+echo "PASS: Agent v2 runtime isolation verification passed."
 
 bash "$ROOT_DIR/scripts/verify-upgrade-rollback.sh"
 

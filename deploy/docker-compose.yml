@@ -40,6 +40,9 @@ services:
   n8n:
     image: ${N8N_IMAGE:?Set N8N_IMAGE in deploy/.env}
     restart: unless-stopped
+    dns:
+      - ${EGRESS_DNS_PRIMARY:-1.1.1.1}
+      - ${EGRESS_DNS_SECONDARY:-8.8.8.8}
     depends_on:
       n8n-db:
         condition: service_healthy
@@ -147,6 +150,9 @@ services:
     profiles: ["sso"]
     image: ${OAUTH2_PROXY_IMAGE:?Set OAUTH2_PROXY_IMAGE in deploy/.env}
     restart: unless-stopped
+    dns:
+      - ${EGRESS_DNS_PRIMARY:-1.1.1.1}
+      - ${EGRESS_DNS_SECONDARY:-8.8.8.8}
     environment:
       OAUTH2_PROXY_PROVIDER: oidc
       OAUTH2_PROXY_OIDC_ISSUER_URL: ${SSO_OIDC_ISSUER_URL:?Set SSO_OIDC_ISSUER_URL in deploy/.env}

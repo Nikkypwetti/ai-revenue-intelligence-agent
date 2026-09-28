@@ -351,6 +351,35 @@ for script in \
   bash -n "$script"
 done
 
+grep -q 'run --rm --no-deps -T n8n' "$ROOT_DIR/scripts/import-hubspot-runtime-credential.sh" || {
+  echo "FAIL: HubSpot credential import is not isolated from the long-running n8n process."
+  exit 1
+}
+grep -Fq '"${compose[@]}" stop n8n' "$ROOT_DIR/scripts/deploy-hubspot-connector.sh" || {
+  echo "FAIL: HubSpot deployment does not stop Agent v2 n8n before CLI mutation."
+  exit 1
+}
+grep -q 'set_connector_state false' "$ROOT_DIR/scripts/deploy-hubspot-connector.sh" || {
+  echo "FAIL: HubSpot deployment is not fail-closed while runtime assets are prepared."
+  exit 1
+}
+grep -q 'set_connector_state true' "$ROOT_DIR/scripts/deploy-hubspot-connector.sh" || {
+  echo "FAIL: HubSpot deployment does not activate governance after runtime health."
+  exit 1
+}
+grep -q 'EGRESS_DNS_PRIMARY' "$ROOT_DIR/deploy/docker-compose.yml" || {
+  echo "FAIL: Agent v2 outbound connector DNS is not configurable."
+  exit 1
+}
+grep -q '^EGRESS_DNS_PRIMARY=1.1.1.1$' "$ROOT_DIR/deploy/.env.example" || {
+  echo "FAIL: example environment does not document the primary egress DNS setting."
+  exit 1
+}
+grep -q '^EGRESS_DNS_SECONDARY=8.8.8.8$' "$ROOT_DIR/deploy/.env.example" || {
+  echo "FAIL: example environment does not document the secondary egress DNS setting."
+  exit 1
+}
+
 if bash "$ROOT_DIR/scripts/deploy-hubspot-connector.sh" \
   --confirm WRONG_TOKEN >/tmp/revint-hubspot-guard.out 2>&1; then
   echo "FAIL: HubSpot activation accepted an invalid confirmation token."
@@ -363,21 +392,13 @@ grep -q 'activation confirmation token is missing or incorrect' \
   }
 rm -f /tmp/revint-hubspot-guard.out
 
-if ! ss -ltn | grep -qE ':5678[[:space:]]'; then
-  echo "FAIL: protected old local n8n listener on port 5678 is missing."
-  exit 1
-fi
-health="$(curl -fsS --max-time 10 http://127.0.0.1:5681/healthz)"
-[[ "$health" == *'"status":"ok"'* ]] || {
-  echo "FAIL: Agent v2 health endpoint is not healthy."
-  exit 1
-}
+bash "$ROOT_DIR/scripts/verify-runtime-isolation.sh"
 
 echo "PASS: controlled batch ingestion reuses the canonical Stage 3 mapping gateway."
 echo "PASS: sync cursor advances only through the dedicated audit-writer completion function."
 echo "PASS: Reporting RO, Connector Writer, and Audit Writer retain separate privilege boundaries."
 echo "PASS: explicit activation guard prevents accidental live HubSpot polling."
-echo "PASS: old n8n port 5678 remains available and Agent v2 remains healthy on 5681."
+echo "PASS: Agent v2 runtime isolation verification passed."
 
 cleanup
 bash "$ROOT_DIR/scripts/verify-external-sso.sh"

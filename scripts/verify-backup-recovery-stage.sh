@@ -66,17 +66,14 @@ temp_reporting_count="$(
 )"
 [[ "$temp_reporting_count" == "0" ]] ||   fail "temporary reporting restore-verification databases remain."
 
-ss -ltn | grep -q ':5678[[:space:]]' ||   fail "protected old local n8n listener on port 5678 is missing."
-ss -ltn | grep -q '127.0.0.1:5681[[:space:]]' ||   fail "Agent v2 listener on 127.0.0.1:5681 is missing."
-
-curl -fsS --max-time 10 http://127.0.0.1:5681/healthz | grep -q '"status":"ok"' ||   fail "Agent v2 health endpoint is not healthy."
+bash "$ROOT_DIR/scripts/verify-runtime-isolation.sh"
 
 echo "PASS: backup artifacts are owner-only and Git-ignored."
 echo "PASS: checksum, encryption-key, database restore, and n8n archive recovery drill passed."
 echo "PASS: guarded live restore rejects invalid confirmation before touching live state."
 echo "PASS: daily 02:30 backup cron is installed exactly once."
 echo "PASS: restore-verification temporary databases are cleaned."
-echo "PASS: old n8n 5678 and Agent v2 5681 isolation remains intact."
+echo "PASS: Agent v2 runtime isolation verification passed."
 
 bash "$ROOT_DIR/scripts/verify-observability-core.sh"
 

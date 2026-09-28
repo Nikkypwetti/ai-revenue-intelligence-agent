@@ -120,21 +120,7 @@ credential_state="$(psql_n8n -c "
   exit 1
 }
 
-if ! ss -ltn | grep -qE '127\.0\.0\.1:5681|0\.0\.0\.0:5681|\[::\]:5681'; then
-  echo "FAIL: Agent v2 is not listening on port 5681."
-  exit 1
-fi
-
-if ! ss -ltn | grep -qE ':5678[[:space:]]'; then
-  echo "FAIL: protected old local n8n listener on port 5678 is missing."
-  exit 1
-fi
-
-health="$(curl -fsS --max-time 10 http://127.0.0.1:5681/healthz)"
-[[ "$health" == *'"status":"ok"'* ]] || {
-  echo "FAIL: Agent v2 health endpoint is not healthy."
-  exit 1
-}
+bash "$ROOT_DIR/scripts/verify-runtime-isolation.sh"
 
 psql_admin <<'SQL' >/dev/null
 INSERT INTO reporting.deals (
@@ -343,7 +329,7 @@ echo "PASS: material pipeline movement is detected against the previous snapshot
 echo "PASS: seven-day closed-won context and top stale deals are generated."
 echo "PASS: reporting reader can execute only the bounded intelligence function."
 echo "PASS: audit writer can persist scheduled-intelligence events."
-echo "PASS: old n8n port 5678 remains available and Agent v2 remains isolated on 5681."
+echo "PASS: Agent v2 runtime isolation verification passed."
 
 bash "$ROOT_DIR/scripts/verify-agent-core.sh"
 

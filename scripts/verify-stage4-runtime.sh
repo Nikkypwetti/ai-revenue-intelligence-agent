@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 ENV_FILE="$ROOT_DIR/deploy/.env"
 COMPOSE_FILE="$ROOT_DIR/deploy/docker-compose.yml"
-ENDPOINT="http://127.0.0.1:5681/webhook/revint/v2/deals"
+ENDPOINT="http://127.0.0.1:${N8N_PORT:-5681}/webhook/revint/v2/deals"
 
 set -a
 # shellcheck disable=SC1090
@@ -118,21 +118,7 @@ connector_state="$(psql_admin -c "
   echo "FAIL: REST ingestion connector is not active on contract version 1."
   exit 1
 }
-if ! ss -ltn | grep -qE '127\.0\.0\.1:5681|0\.0\.0\.0:5681|\[::\]:5681'; then
-  echo "FAIL: Agent v2 is not listening on port 5681."
-  exit 1
-fi
-
-if ! ss -ltn | grep -qE ':5678[[:space:]]'; then
-  echo "FAIL: protected old local n8n listener on port 5678 is missing."
-  exit 1
-fi
-
-health="$(curl -fsS --max-time 10 http://127.0.0.1:5681/healthz)"
-[[ "$health" == *'"status":"ok"'* ]] || {
-  echo "FAIL: Agent v2 health endpoint is not healthy."
-  exit 1
-}
+bash "$ROOT_DIR/scripts/verify-runtime-isolation.sh"
 
 python3 - <<'PY'
 import json
@@ -140,7 +126,7 @@ import os
 import urllib.error
 import urllib.request
 
-url = "http://127.0.0.1:5681/webhook/revint/v2/deals"
+url = f"http://127.0.0.1:{os.environ.get('N8N_PORT', '5681')}/webhook/revint/v2/deals"
 key = os.environ["REST_INGEST_API_KEY"]
 currency = os.environ["CLIENT_CURRENCY"]
 def request(payload, authenticated=True):
