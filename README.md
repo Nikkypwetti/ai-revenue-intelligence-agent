@@ -7,7 +7,7 @@ A governed self-service revenue reporting system that turns manager questions in
 
 ## Agent v2 — deployable business edition
 
-Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent execution core, Scheduled Intelligence, the runtime Reliability core, Monitoring & Observability, Backup & Recovery, and Upgrade & Rollback are merged and locally verified. HTTPS & Public Ingress controls are also locally verified on the isolated Agent v2 deployment.
+Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent execution core, Scheduled Intelligence, the runtime Reliability core, Monitoring & Observability, Backup & Recovery, Upgrade & Rollback, and HTTPS & Public Ingress are merged and locally verified. The External Authentication / SSO foundation is also locally verified in its disabled-by-default state on the isolated Agent v2 deployment.
 
 **Stage 1** provides the reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
 
@@ -35,9 +35,11 @@ Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent e
 
 **HTTPS & Public Ingress** adds a digest-pinned nginx TLS edge, HTTP-to-HTTPS redirect, one-hop trusted-proxy handling, exact webhook-route allowlisting, editor/UI blocking, a read-only non-privileged ingress container, private/public Docker network separation, and an explicit confirmation guard before any non-loopback bind.
 
-See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), [identity/permissions documentation](docs/identity-permissions.md), [Agent execution-core documentation](docs/agent-execution-core.md), [Scheduled Intelligence documentation](docs/scheduled-intelligence.md), [Reliability documentation](docs/reliability-core.md), [Monitoring & Observability documentation](docs/observability-core.md), [Backup & Recovery documentation](docs/backup-recovery.md), [Upgrade & Rollback documentation](docs/upgrade-rollback.md), and [HTTPS & Public Ingress documentation](docs/https-ingress.md).
+**External Authentication / SSO** adds a provider-neutral OIDC edge through OAuth2 Proxy, deterministic external-subject-to-principal resolution, an encrypted internal edge-to-n8n credential, spoof-resistant principal binding, explicit user-to-principal mapping, and guarded production activation. The local deployment keeps `SSO_ENABLED=false`; no real external identity provider is activated or claimed as tested.
 
-> These stages are production-foundation work, not a claim of full production readiness. A live LLM intent adapter, external CRM/billing adapters, external Slack/email delivery and incident notifications, external authentication/SSO, encrypted off-site backup replication, and activation on a real public domain with a trusted production certificate remain later deployment work.
+See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), [identity/permissions documentation](docs/identity-permissions.md), [Agent execution-core documentation](docs/agent-execution-core.md), [Scheduled Intelligence documentation](docs/scheduled-intelligence.md), [Reliability documentation](docs/reliability-core.md), [Monitoring & Observability documentation](docs/observability-core.md), [Backup & Recovery documentation](docs/backup-recovery.md), [Upgrade & Rollback documentation](docs/upgrade-rollback.md), [HTTPS & Public Ingress documentation](docs/https-ingress.md), and [External Authentication / SSO documentation](docs/external-sso.md).
+
+> These stages are production-foundation work, not a claim of full production readiness. A live LLM intent adapter, external CRM/billing adapters, external Slack/email delivery and incident notifications, encrypted off-site backup replication, activation on a real public domain with a trusted production certificate, and an end-to-end login against the client's real identity provider remain later deployment work.
 
 ## Business problem
 

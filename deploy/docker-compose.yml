@@ -106,7 +106,10 @@ services:
     environment:
       PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-localhost}
       PUBLIC_HTTPS_ORIGIN: ${PUBLIC_HTTPS_ORIGIN:-https://localhost:8443}
-      NGINX_ENVSUBST_FILTER: "^(PUBLIC_DOMAIN|PUBLIC_HTTPS_ORIGIN)$"
+      SSO_ENABLED: ${SSO_ENABLED:-false}
+      SSO_IDENTITY_PROVIDER_KEY: ${SSO_IDENTITY_PROVIDER_KEY:-oidc}
+      SSO_INTERNAL_API_KEY: ${SSO_INTERNAL_API_KEY:-disabled}
+      NGINX_ENVSUBST_FILTER: "^(PUBLIC_DOMAIN|PUBLIC_HTTPS_ORIGIN|SSO_ENABLED|SSO_IDENTITY_PROVIDER_KEY|SSO_INTERNAL_API_KEY)$"
     volumes:
       - ./nginx/revint.conf.template:/etc/nginx/templates/default.conf.template:ro
       - ./tls/tls.crt:/etc/nginx/tls/tls.crt:ro
@@ -139,6 +142,41 @@ services:
     networks:
       - agent_private
       - ingress_public
+
+  oauth2-proxy:
+    profiles: ["sso"]
+    image: ${OAUTH2_PROXY_IMAGE:?Set OAUTH2_PROXY_IMAGE in deploy/.env}
+    restart: unless-stopped
+    environment:
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_OIDC_ISSUER_URL: ${SSO_OIDC_ISSUER_URL:?Set SSO_OIDC_ISSUER_URL in deploy/.env}
+      OAUTH2_PROXY_CLIENT_ID: ${SSO_OIDC_CLIENT_ID:?Set SSO_OIDC_CLIENT_ID in deploy/.env}
+      OAUTH2_PROXY_CLIENT_SECRET: ${SSO_OIDC_CLIENT_SECRET:?Set SSO_OIDC_CLIENT_SECRET in deploy/.env}
+      OAUTH2_PROXY_COOKIE_SECRET: ${SSO_COOKIE_SECRET:?Set SSO_COOKIE_SECRET in deploy/.env}
+      OAUTH2_PROXY_EMAIL_DOMAINS: ${SSO_ALLOWED_EMAIL_DOMAINS:?Set SSO_ALLOWED_EMAIL_DOMAINS in deploy/.env}
+      OAUTH2_PROXY_REDIRECT_URL: ${PUBLIC_HTTPS_ORIGIN:-https://localhost:8443}/oauth2/callback
+      OAUTH2_PROXY_SCOPE: "openid profile email"
+      OAUTH2_PROXY_HTTP_ADDRESS: "0.0.0.0:4180"
+      OAUTH2_PROXY_UPSTREAMS: "static://202"
+      OAUTH2_PROXY_REVERSE_PROXY: "true"
+      OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
+      OAUTH2_PROXY_PASS_USER_HEADERS: "true"
+      OAUTH2_PROXY_USER_ID_CLAIM: "sub"
+      OAUTH2_PROXY_COOKIE_SECURE: "true"
+      OAUTH2_PROXY_COOKIE_HTTPONLY: "true"
+      OAUTH2_PROXY_COOKIE_SAMESITE: "lax"
+      OAUTH2_PROXY_COOKIE_NAME: "_revint_sso"
+      OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - agent_private
+      - agent_egress
 
 volumes:
   n8n_data:
