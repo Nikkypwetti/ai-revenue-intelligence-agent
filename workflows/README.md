@@ -10,6 +10,14 @@ This directory contains deployable Agent v2 runtime templates and portfolio-safe
 
 The locally verified Stage 4 ingestion adapter that normalizes authenticated deal payloads into the canonical reporting contract.
 
+### REVINT-V2-HUBSPOT-01 — Incremental Deal Sync
+
+`runtime-templates/REVINT-V2-HUBSPOT-01.json`
+
+The disabled-by-default real CRM adapter. It reads changed HubSpot deals through a dedicated read-only credential, classifies open/won/lost status deterministically, and sends a bounded batch through the existing governed connector mapping and canonical ingestion gateway. Incremental cursor completion is recorded through the Audit Writer boundary.
+
+Live activation requires a dedicated private-app token and the explicit `REVINT_HUBSPOT_CONNECTOR` confirmation guard. See `docs/hubspot-connector.md`.
+
 ### REVINT-V2-AGENT-01 — Governed Report Agent Core
 
 `runtime-templates/REVINT-V2-AGENT-01.json`
@@ -30,7 +38,7 @@ It detects stale open records, missing expected close dates, and material open-p
 
 `runtime-templates/REVINT-V2-SYS-01.json`
 
-The locally verified Agent v2 terminal-failure workflow. The REST ingestion, reporting Agent, and Scheduled Intelligence workflows point to it through n8n's `errorWorkflow` setting after bounded node retries are exhausted.
+The locally verified Agent v2 terminal-failure workflow. The REST ingestion, reporting Agent, Scheduled Intelligence, Observability, and activated HubSpot sync workflows point to it through n8n's `errorWorkflow` setting after bounded node retries are exhausted.
 
 It redacts and normalizes the terminal error, then records an idempotent runtime failure, dead-letter entry, and per-component circuit state through the existing Audit Writer credential. It does not automatically replay failed business workflows or require an n8n API key.
 
