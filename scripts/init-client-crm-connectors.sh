@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/deploy/.env}"
 COMPOSE_FILE="${COMPOSE_FILE:-$ROOT_DIR/deploy/docker-compose.yml}"
-MIGRATION="$ROOT_DIR/database/migrations/016_client_crm_connectors.sql"
-SEED="$ROOT_DIR/database/seeds/011_client_crm_reliability.sql"
+MIGRATION="$ROOT_DIR/database/migrations/030_client_crm_connectors.sql"
+SEED="$ROOT_DIR/database/seeds/020_client_crm_reliability.sql"
 SALESFORCE_CONFIG="${SALESFORCE_CONNECTOR_CONFIG_FILE:-$ROOT_DIR/config/salesforce-connector.example.json}"
 AIRTABLE_CONFIG="${AIRTABLE_CONNECTOR_CONFIG_FILE:-$ROOT_DIR/config/airtable-funnel-connector.example.json}"
 
