@@ -14,6 +14,7 @@ set +a
 
 bash "$ROOT_DIR/scripts/init-agent-execution-core.sh"
 bash "$ROOT_DIR/scripts/import-agent-runtime-credential.sh"
+bash "$ROOT_DIR/scripts/import-groq-runtime-credential.sh"
 
 cat "$WORKFLOW" | docker compose   --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T n8n   n8n import:workflow --input=/dev/stdin
 

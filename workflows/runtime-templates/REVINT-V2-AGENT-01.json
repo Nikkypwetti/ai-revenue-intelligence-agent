@@ -31,7 +31,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const raw = $json;\nconst body = raw.body && typeof raw.body === 'object' && !Array.isArray(raw.body) ? raw.body : raw;\nconst authSource = String(raw.__revint_auth_source ?? '').trim();\nconst authenticationSource = ['sso','service'].includes(authSource) ? authSource : 'unknown';\nconst now = new Date();\nconst suffix = Math.random().toString(36).slice(2, 10).toUpperCase();\nconst requestId = 'AGENT-' + now.getTime() + '-' + suffix;\nconst correlationId = 'CORR-' + now.getTime() + '-' + suffix;\nconst errors = [];\nconst clarifications = [];\nif (raw.__revint_security_error) {\n  errors.push({code:String(raw.__revint_security_error), message:'Request rejected by the Agent security gateway.'});\n}\n\nconst principalKey = typeof body.principal_key === 'string' ? body.principal_key.trim() : '';\nif (!principalKey || principalKey.length > 128) {\n  errors.push({code:'PRINCIPAL_KEY_REQUIRED', message:'A valid principal_key is required.'});\n}\n\nconst allowedKpis = new Set([\n  'closed_won_revenue','open_pipeline','closed_won_deals','win_rate',\n  'open_deals_count','weighted_pipeline','pipeline_coverage_ratio',\n  'stale_open_deals_count','stale_pipeline_value','missing_close_date_deals',\n  'average_deal_size','closed_lost_deals','loss_rate','average_acv',\n  'average_discount_percent','commit_forecast','best_case_forecast',\n  'forecast_accuracy','average_sales_cycle_days','average_stage_age_days',\n  'pipeline_velocity','quota_attainment','speed_to_lead_hours',\n  'follow_up_sla_compliance','overdue_followups','crm_data_quality_score',\n  'missing_owner_deals','lead_to_mql_rate','mql_to_sql_rate',\n  'sql_to_opportunity_rate','opportunity_to_won_rate','current_mrr',\n  'current_arr','expansion_mrr','churned_mrr','net_revenue_retention',\n  'gross_revenue_retention'\n]);\nconst allowedPeriods = new Set([\n  'today','yesterday','this_week','last_week','this_month','last_month',\n  'this_quarter','last_quarter','this_year','last_year'\n]);\nconst allowedModes = new Set([\n  'metric_report','trend_report','comparison_report','breakdown_report','diagnostic_report'\n]);\nconst allowedDimensions = new Set([\n  'sales_rep','deal_stage','lead_source','segment','region','industry','campaign','forecast_category'\n]);\nconst allowedFilterFields = new Set([\n  'sales_rep','deal_stage','lead_source','segment','region','industry','campaign','forecast_category'\n]);\n\nfunction normalizeFilters(input) {\n  if (input === undefined || input === null) return {};\n  if (typeof input !== 'object' || Array.isArray(input)) {\n    errors.push({code:'FILTERS_INVALID', message:'filters must be an object.'});\n    return {};\n  }\n  const output = {};\n  for (const [field, rawValue] of Object.entries(input)) {\n    if (!allowedFilterFields.has(field)) {\n      errors.push({code:'FILTER_FIELD_NOT_SUPPORTED', message:'Unsupported filter field: ' + field});\n      continue;\n    }\n    const values = Array.isArray(rawValue) ? rawValue : [rawValue];\n    if (\n      values.length === 0 || values.length > 50 ||\n      values.some(v => typeof v !== 'string' || !v.trim() || v.trim().length > 200)\n    ) {\n      errors.push({code:'FILTER_VALUE_INVALID', message:'Invalid filter value for ' + field + '.'});\n      continue;\n    }\n    output[field] = [...new Set(values.map(v => v.trim()))];\n  }\n  return output;\n}\n\nfunction normalizeDimensions(input) {\n  if (input === undefined || input === null) return [];\n  if (!Array.isArray(input)) {\n    errors.push({code:'DIMENSIONS_INVALID', message:'dimensions must be an array.'});\n    return [];\n  }\n  const values = [...new Set(input.map(v => typeof v === 'string' ? v.trim() : ''))].filter(Boolean);\n  if (values.length > 1) {\n    clarifications.push({code:'MULTI_DIMENSION_NOT_SUPPORTED', question:'Please request one breakdown dimension at a time.'});\n  }\n  for (const value of values) {\n    if (!allowedDimensions.has(value)) {\n      errors.push({code:'DIMENSION_NOT_SUPPORTED', message:'Unsupported dimension: ' + value});\n    }\n  }\n  return values;\n}\nfunction inferMetric(q) {\n  const patterns = [\n    ['pipeline_coverage_ratio', /\\bpipeline coverage(?: ratio)?\\b/],\n    ['pipeline_velocity', /\\bpipeline velocity\\b/],\n    ['weighted_pipeline', /\\bweighted pipeline\\b/],\n    ['stale_pipeline_value', /\\bstale pipeline(?: value| amount)?\\b/],\n    ['stale_open_deals_count', /\\b(?:stale open deals?|stale deals? count|number of stale deals?)\\b/],\n    ['open_deals_count', /\\b(?:open deals? count|number of open deals?|how many open deals?)\\b/],\n    ['missing_close_date_deals', /\\b(?:missing close date deals?|deals? (?:with )?missing close dates?)\\b/],\n    ['closed_won_revenue', /\\b(?:closed[\\s-]*won revenue|won revenue|revenue won)\\b/],\n    ['closed_won_deals', /\\b(?:closed[\\s-]*won deals?|won deals? count|number of won deals?|deals? won)\\b/],\n    ['closed_lost_deals', /\\b(?:closed[\\s-]*lost deals?|lost deals? count|number of lost deals?)\\b/],\n    ['average_deal_size', /\\b(?:average|avg) deal size\\b/],\n    ['average_discount_percent', /\\b(?:average|avg) discount(?: percent| percentage)?\\b/],\n    ['average_acv', /\\b(?:average|avg) acv\\b/],\n    ['win_rate', /\\bwin rate\\b/],\n    ['loss_rate', /\\bloss rate\\b/],\n    ['commit_forecast', /\\bcommit forecast\\b/],\n    ['best_case_forecast', /\\bbest[\\s-]*case forecast\\b/],\n    ['forecast_accuracy', /\\bforecast accuracy\\b/],\n    ['average_sales_cycle_days', /\\b(?:average|avg)?\\s*sales cycle(?: days?)?\\b/],\n    ['average_stage_age_days', /\\b(?:average|avg)?\\s*stage age(?: days?)?\\b/],\n    ['quota_attainment', /\\bquota attainment\\b/],\n    ['speed_to_lead_hours', /\\bspeed[\\s-]*to[\\s-]*lead\\b/],\n    ['follow_up_sla_compliance', /\\b(?:follow[\\s-]*up )?sla compliance\\b/],\n    ['overdue_followups', /\\boverdue follow[\\s-]*ups?\\b/],\n    ['crm_data_quality_score', /\\b(?:crm )?data quality(?: score)?\\b/],\n    ['missing_owner_deals', /\\b(?:missing owner deals?|deals? (?:with )?missing owners?|unowned deals?)\\b/],\n    ['lead_to_mql_rate', /\\b(?:lead[\\s-]*to[\\s-]*mql|lead \u2192 mql)(?: conversion| rate)?\\b/],\n    ['mql_to_sql_rate', /\\b(?:mql[\\s-]*to[\\s-]*sql|mql \u2192 sql)(?: conversion| rate)?\\b/],\n    ['sql_to_opportunity_rate', /\\b(?:sql[\\s-]*to[\\s-]*opportunity|sql \u2192 opportunity)(?: conversion| rate)?\\b/],\n    ['opportunity_to_won_rate', /\\b(?:opportunity[\\s-]*to[\\s-]*(?:won|closed won)|opportunity \u2192 (?:won|closed won))(?: conversion| rate)?\\b/],\n    ['net_revenue_retention', /\\b(?:net revenue retention|nrr)\\b/],\n    ['gross_revenue_retention', /\\b(?:gross revenue retention|grr)\\b/],\n    ['expansion_mrr', /\\bexpansion mrr\\b/],\n    ['churned_mrr', /\\b(?:churned|churn) mrr\\b/],\n    ['current_mrr', /\\b(?:current mrr|monthly recurring revenue)\\b/],\n    ['current_arr', /\\b(?:current arr|annual recurring revenue)\\b/],\n    ['open_pipeline', /\\b(?:open pipeline|pipeline value|total pipeline)\\b/]\n  ];\n  const matches = patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n  if (matches.length === 0 && /\\bpipeline\\b/.test(q)) matches.push('open_pipeline');\n  return [...new Set(matches)];\n}\n\nfunction inferDimension(q) {\n  const patterns = [\n    ['sales_rep', /\\bby\\s+(?:sales\\s+rep|rep|owner)\\b/],\n    ['deal_stage', /\\bby\\s+(?:deal\\s+)?stage\\b/],\n    ['lead_source', /\\bby\\s+(?:lead\\s+)?source\\b/],\n    ['segment', /\\bby\\s+segment\\b/],\n    ['region', /\\bby\\s+(?:region|territory)\\b/],\n    ['industry', /\\bby\\s+industry\\b/],\n    ['campaign', /\\bby\\s+campaign\\b/],\n    ['forecast_category', /\\bby\\s+forecast category\\b/]\n  ];\n  return patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n}\n\nfunction inferPeriod(q) {\n  const patterns = [\n    ['last_quarter', /\\blast quarter\\b/], ['this_quarter', /\\bthis quarter\\b/],\n    ['last_month', /\\blast month\\b/], ['this_month', /\\bthis month\\b/],\n    ['last_week', /\\blast week\\b/], ['this_week', /\\bthis week\\b/],\n    ['last_year', /\\blast year\\b/], ['this_year', /\\bthis year\\b/],\n    ['yesterday', /\\byesterday\\b/], ['today', /\\btoday\\b/]\n  ];\n  return patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n}\n\nlet intent = null;\nlet interpreterType = null;\n\nif (body.structured_intent && typeof body.structured_intent === 'object' && !Array.isArray(body.structured_intent)) {\n  interpreterType = 'structured_intent_v2';\n  const supplied = body.structured_intent;\n  const kpiKey = typeof supplied.kpi_key === 'string' ? supplied.kpi_key.trim() : '';\n  const periodKey = typeof supplied.period_key === 'string' ? supplied.period_key.trim() : '';\n  let mode = typeof supplied.mode === 'string' ? supplied.mode.trim() : 'metric_report';\n  const dimensions = normalizeDimensions(supplied.dimensions);\n  if (!allowedKpis.has(kpiKey)) {\n    clarifications.push({code:'KPI_CLARIFICATION_REQUIRED', question:'Please choose a KPI from the approved Revenue Question Pack.'});\n  }\n  if (!allowedPeriods.has(periodKey)) {\n    clarifications.push({code:'PERIOD_CLARIFICATION_REQUIRED', question:'Which reporting period should I use (for example this month, last month, this quarter, or last quarter)?'});\n  }\n  if (!allowedModes.has(mode)) {\n    clarifications.push({code:'REPORT_MODE_CLARIFICATION_REQUIRED', question:'Should this be a metric, comparison, trend, breakdown, or pipeline diagnostic report?'});\n  }\n  if (dimensions.length === 1 && mode === 'metric_report') mode = 'breakdown_report';\n  if (mode === 'breakdown_report' && dimensions.length !== 1) {\n    clarifications.push({code:'BREAKDOWN_DIMENSION_REQUIRED', question:'Which single breakdown should I use: sales rep, stage, source, segment, region, industry, campaign, or forecast category?'});\n  }\n  if (mode === 'diagnostic_report' && kpiKey !== 'open_pipeline') {\n    clarifications.push({code:'DIAGNOSTIC_KPI_NOT_SUPPORTED', question:'Pipeline diagnostics currently support open pipeline. Please ask why open pipeline changed.'});\n  }\n\n  intent = {\n    kpi_key: kpiKey,\n    period_key: periodKey,\n    mode,\n    dimensions,\n    filters: normalizeFilters(supplied.filters)\n  };\n} else {\n  interpreterType = 'deterministic_nl_v2';\n  const question = typeof body.question === 'string' ? body.question.trim() : '';\n  if (!question || question.length > 1000) {\n    errors.push({code:'QUESTION_REQUIRED', message:'A report question of at most 1000 characters is required.'});\n  }\n\n  const q = question.toLowerCase().replace(/\\s+/g, ' ');\n  const metricMatches = inferMetric(q);\n  const periodMatches = inferPeriod(q);\n  const dimensions = inferDimension(q);\n\n  if (metricMatches.length !== 1) {\n    clarifications.push({code:'KPI_CLARIFICATION_REQUIRED', question:'I could not identify exactly one approved Revenue KPI. Please specify the metric you want.'});\n  }\n  if (periodMatches.length !== 1) {\n    clarifications.push({code:'PERIOD_CLARIFICATION_REQUIRED', question:'Which reporting period should I use (for example this month, last month, this quarter, or last quarter)?'});\n  }\n  if (dimensions.length > 1) {\n    clarifications.push({code:'MULTI_DIMENSION_NOT_SUPPORTED', question:'Please request one breakdown dimension at a time.'});\n  }\n\n  let mode = 'metric_report';\n  if (/\\bwhy\\b/.test(q) && (metricMatches[0] === 'open_pipeline' || /\\bpipeline\\b/.test(q))) {\n    mode = 'diagnostic_report';\n  } else if (dimensions.length === 1) {\n    mode = 'breakdown_report';\n  } else if (/\\b(compare|comparison|compared|versus|vs\\.?)\\b/.test(q)) {\n    mode = 'comparison_report';\n  } else if (/\\b(trend|change|changing|movement|moving)\\b/.test(q)) {\n    mode = 'trend_report';\n  }\n\n  intent = {\n    kpi_key: metricMatches.length === 1 ? metricMatches[0] : null,\n    period_key: periodMatches.length === 1 ? periodMatches[0] : null,\n    mode,\n    dimensions,\n    filters: {}\n  };\n}\n\nreturn {\n  request_id: requestId,\n  correlation_id: correlationId,\n  principal_key: principalKey,\n  authentication_source: authenticationSource,\n  question: typeof body.question === 'string' ? body.question.trim() : null,\n  interpreter_type: interpreterType,\n  structured_intent: intent,\n  validation: {\n    is_valid: errors.length === 0,\n    errors,\n    clarification_required: clarifications.length > 0,\n    clarifications,\n    validated_at: now.toISOString()\n  },\n  should_execute: errors.length === 0 && clarifications.length === 0,\n  workflow_stage: errors.length === 0 && clarifications.length === 0 ? 'agent_intent_ready' : 'agent_clarification_required'\n};"
+          "jsCode": "const raw = $json;\nconst body = raw.body && typeof raw.body === 'object' && !Array.isArray(raw.body) ? raw.body : raw;\nconst authSource = String(raw.__revint_auth_source ?? '').trim();\nconst authenticationSource = ['sso','service'].includes(authSource) ? authSource : 'unknown';\nconst now = new Date();\nconst suffix = Math.random().toString(36).slice(2, 10).toUpperCase();\nconst requestId = 'AGENT-' + now.getTime() + '-' + suffix;\nconst correlationId = 'CORR-' + now.getTime() + '-' + suffix;\nconst errors = [];\nconst clarifications = [];\nif (raw.__revint_security_error) {\n  errors.push({code:String(raw.__revint_security_error), message:'Request rejected by the Agent security gateway.'});\n}\n\nconst principalKey = typeof body.principal_key === 'string' ? body.principal_key.trim() : '';\nif (!principalKey || principalKey.length > 128) {\n  errors.push({code:'PRINCIPAL_KEY_REQUIRED', message:'A valid principal_key is required.'});\n}\n\nconst allowedKpis = new Set([\n  'closed_won_revenue','open_pipeline','closed_won_deals','win_rate',\n  'open_deals_count','weighted_pipeline','pipeline_coverage_ratio',\n  'stale_open_deals_count','stale_pipeline_value','missing_close_date_deals',\n  'average_deal_size','closed_lost_deals','loss_rate','average_acv',\n  'average_discount_percent','commit_forecast','best_case_forecast',\n  'forecast_accuracy','average_sales_cycle_days','average_stage_age_days',\n  'pipeline_velocity','quota_attainment','speed_to_lead_hours',\n  'follow_up_sla_compliance','overdue_followups','crm_data_quality_score',\n  'missing_owner_deals','lead_to_mql_rate','mql_to_sql_rate',\n  'sql_to_opportunity_rate','opportunity_to_won_rate','current_mrr',\n  'current_arr','expansion_mrr','churned_mrr','net_revenue_retention',\n  'gross_revenue_retention'\n]);\nconst allowedPeriods = new Set([\n  'today','yesterday','this_week','last_week','this_month','last_month',\n  'this_quarter','last_quarter','this_year','last_year'\n]);\nconst allowedModes = new Set([\n  'metric_report','trend_report','comparison_report','breakdown_report','diagnostic_report'\n]);\nconst allowedDimensions = new Set([\n  'sales_rep','deal_stage','lead_source','segment','region','industry','campaign','forecast_category'\n]);\nconst allowedFilterFields = new Set([\n  'sales_rep','deal_stage','lead_source','segment','region','industry','campaign','forecast_category'\n]);\n\nfunction normalizeFilters(input) {\n  if (input === undefined || input === null) return {};\n  if (typeof input !== 'object' || Array.isArray(input)) {\n    errors.push({code:'FILTERS_INVALID', message:'filters must be an object.'});\n    return {};\n  }\n  const output = {};\n  for (const [field, rawValue] of Object.entries(input)) {\n    if (!allowedFilterFields.has(field)) {\n      errors.push({code:'FILTER_FIELD_NOT_SUPPORTED', message:'Unsupported filter field: ' + field});\n      continue;\n    }\n    const values = Array.isArray(rawValue) ? rawValue : [rawValue];\n    if (\n      values.length === 0 || values.length > 50 ||\n      values.some(v => typeof v !== 'string' || !v.trim() || v.trim().length > 200)\n    ) {\n      errors.push({code:'FILTER_VALUE_INVALID', message:'Invalid filter value for ' + field + '.'});\n      continue;\n    }\n    output[field] = [...new Set(values.map(v => v.trim()))];\n  }\n  return output;\n}\n\nfunction normalizeDimensions(input) {\n  if (input === undefined || input === null) return [];\n  if (!Array.isArray(input)) {\n    errors.push({code:'DIMENSIONS_INVALID', message:'dimensions must be an array.'});\n    return [];\n  }\n  const values = [...new Set(input.map(v => typeof v === 'string' ? v.trim() : ''))].filter(Boolean);\n  if (values.length > 1) {\n    clarifications.push({code:'MULTI_DIMENSION_NOT_SUPPORTED', question:'Please request one breakdown dimension at a time.'});\n  }\n  for (const value of values) {\n    if (!allowedDimensions.has(value)) {\n      errors.push({code:'DIMENSION_NOT_SUPPORTED', message:'Unsupported dimension: ' + value});\n    }\n  }\n  return values;\n}\nfunction inferMetric(q) {\n  const patterns = [\n    ['pipeline_coverage_ratio', /\\bpipeline coverage(?: ratio)?\\b/],\n    ['pipeline_velocity', /\\bpipeline velocity\\b/],\n    ['weighted_pipeline', /\\bweighted pipeline\\b/],\n    ['stale_pipeline_value', /\\bstale pipeline(?: value| amount)?\\b/],\n    ['stale_open_deals_count', /\\b(?:stale open deals?|stale deals? count|number of stale deals?)\\b/],\n    ['open_deals_count', /\\b(?:open deals? count|number of open deals?|how many open deals?)\\b/],\n    ['missing_close_date_deals', /\\b(?:missing close date deals?|deals? (?:with )?missing close dates?)\\b/],\n    ['closed_won_revenue', /\\b(?:closed[\\s-]*won revenue|won revenue|revenue won)\\b/],\n    ['closed_won_deals', /\\b(?:closed[\\s-]*won deals?|won deals? count|number of won deals?|deals? won)\\b/],\n    ['closed_lost_deals', /\\b(?:closed[\\s-]*lost deals?|lost deals? count|number of lost deals?)\\b/],\n    ['average_deal_size', /\\b(?:average|avg) deal size\\b/],\n    ['average_discount_percent', /\\b(?:average|avg) discount(?: percent| percentage)?\\b/],\n    ['average_acv', /\\b(?:average|avg) acv\\b/],\n    ['win_rate', /\\bwin rate\\b/],\n    ['loss_rate', /\\bloss rate\\b/],\n    ['commit_forecast', /\\bcommit forecast\\b/],\n    ['best_case_forecast', /\\bbest[\\s-]*case forecast\\b/],\n    ['forecast_accuracy', /\\bforecast accuracy\\b/],\n    ['average_sales_cycle_days', /\\b(?:average|avg)?\\s*sales cycle(?: days?)?\\b/],\n    ['average_stage_age_days', /\\b(?:average|avg)?\\s*stage age(?: days?)?\\b/],\n    ['quota_attainment', /\\bquota attainment\\b/],\n    ['speed_to_lead_hours', /\\bspeed[\\s-]*to[\\s-]*lead\\b/],\n    ['follow_up_sla_compliance', /\\b(?:follow[\\s-]*up )?sla compliance\\b/],\n    ['overdue_followups', /\\boverdue follow[\\s-]*ups?\\b/],\n    ['crm_data_quality_score', /\\b(?:crm )?data quality(?: score)?\\b/],\n    ['missing_owner_deals', /\\b(?:missing owner deals?|deals? (?:with )?missing owners?|unowned deals?)\\b/],\n    ['lead_to_mql_rate', /\\b(?:lead[\\s-]*to[\\s-]*mql|lead \u2192 mql)(?: conversion| rate)?\\b/],\n    ['mql_to_sql_rate', /\\b(?:mql[\\s-]*to[\\s-]*sql|mql \u2192 sql)(?: conversion| rate)?\\b/],\n    ['sql_to_opportunity_rate', /\\b(?:sql[\\s-]*to[\\s-]*opportunity|sql \u2192 opportunity)(?: conversion| rate)?\\b/],\n    ['opportunity_to_won_rate', /\\b(?:opportunity[\\s-]*to[\\s-]*(?:won|closed won)|opportunity \u2192 (?:won|closed won))(?: conversion| rate)?\\b/],\n    ['net_revenue_retention', /\\b(?:net revenue retention|nrr)\\b/],\n    ['gross_revenue_retention', /\\b(?:gross revenue retention|grr)\\b/],\n    ['expansion_mrr', /\\bexpansion mrr\\b/],\n    ['churned_mrr', /\\b(?:churned|churn) mrr\\b/],\n    ['current_mrr', /\\b(?:current mrr|monthly recurring revenue)\\b/],\n    ['current_arr', /\\b(?:current arr|annual recurring revenue)\\b/],\n    ['open_pipeline', /\\b(?:open pipeline|pipeline value|total pipeline)\\b/]\n  ];\n  const matches = patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n  if (matches.length === 0 && /\\bpipeline\\b/.test(q)) matches.push('open_pipeline');\n  return [...new Set(matches)];\n}\n\nfunction inferDimension(q) {\n  const patterns = [\n    ['sales_rep', /\\bby\\s+(?:sales\\s+rep|rep|owner)\\b/],\n    ['deal_stage', /\\bby\\s+(?:deal\\s+)?stage\\b/],\n    ['lead_source', /\\bby\\s+(?:lead\\s+)?source\\b/],\n    ['segment', /\\bby\\s+segment\\b/],\n    ['region', /\\bby\\s+(?:region|territory)\\b/],\n    ['industry', /\\bby\\s+industry\\b/],\n    ['campaign', /\\bby\\s+campaign\\b/],\n    ['forecast_category', /\\bby\\s+forecast category\\b/]\n  ];\n  return patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n}\n\nfunction inferPeriod(q) {\n  const patterns = [\n    ['last_quarter', /\\blast quarter\\b/], ['this_quarter', /\\bthis quarter\\b/],\n    ['last_month', /\\blast month\\b/], ['this_month', /\\bthis month\\b/],\n    ['last_week', /\\blast week\\b/], ['this_week', /\\bthis week\\b/],\n    ['last_year', /\\blast year\\b/], ['this_year', /\\bthis year\\b/],\n    ['yesterday', /\\byesterday\\b/], ['today', /\\btoday\\b/]\n  ];\n  return patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n}\n\nlet intent = null;\nlet interpreterType = null;\n\nif (body.structured_intent && typeof body.structured_intent === 'object' && !Array.isArray(body.structured_intent)) {\n  interpreterType = raw.__revint_llm_status === 'used' ? 'groq_structured_intent_v2' : 'structured_intent_v2';\n  const supplied = body.structured_intent;\n  const kpiKey = typeof supplied.kpi_key === 'string' ? supplied.kpi_key.trim() : '';\n  const periodKey = typeof supplied.period_key === 'string' ? supplied.period_key.trim() : '';\n  let mode = typeof supplied.mode === 'string' ? supplied.mode.trim() : 'metric_report';\n  const dimensions = normalizeDimensions(supplied.dimensions);\n  if (!allowedKpis.has(kpiKey)) {\n    clarifications.push({code:'KPI_CLARIFICATION_REQUIRED', question:'Please choose a KPI from the approved Revenue Question Pack.'});\n  }\n  if (!allowedPeriods.has(periodKey)) {\n    clarifications.push({code:'PERIOD_CLARIFICATION_REQUIRED', question:'Which reporting period should I use (for example this month, last month, this quarter, or last quarter)?'});\n  }\n  if (!allowedModes.has(mode)) {\n    clarifications.push({code:'REPORT_MODE_CLARIFICATION_REQUIRED', question:'Should this be a metric, comparison, trend, breakdown, or pipeline diagnostic report?'});\n  }\n  if (dimensions.length === 1 && mode === 'metric_report') mode = 'breakdown_report';\n  if (mode === 'breakdown_report' && dimensions.length !== 1) {\n    clarifications.push({code:'BREAKDOWN_DIMENSION_REQUIRED', question:'Which single breakdown should I use: sales rep, stage, source, segment, region, industry, campaign, or forecast category?'});\n  }\n  if (mode === 'diagnostic_report' && kpiKey !== 'open_pipeline') {\n    clarifications.push({code:'DIAGNOSTIC_KPI_NOT_SUPPORTED', question:'Pipeline diagnostics currently support open pipeline. Please ask why open pipeline changed.'});\n  }\n\n  intent = {\n    kpi_key: kpiKey,\n    period_key: periodKey,\n    mode,\n    dimensions,\n    filters: normalizeFilters(supplied.filters)\n  };\n} else {\n  interpreterType = 'deterministic_nl_v2';\n  const question = typeof body.question === 'string' ? body.question.trim() : '';\n  if (!question || question.length > 1000) {\n    errors.push({code:'QUESTION_REQUIRED', message:'A report question of at most 1000 characters is required.'});\n  }\n\n  const q = question.toLowerCase().replace(/\\s+/g, ' ');\n  const metricMatches = inferMetric(q);\n  const periodMatches = inferPeriod(q);\n  const dimensions = inferDimension(q);\n\n  if (metricMatches.length !== 1) {\n    clarifications.push({code:'KPI_CLARIFICATION_REQUIRED', question:'I could not identify exactly one approved Revenue KPI. Please specify the metric you want.'});\n  }\n  if (periodMatches.length !== 1) {\n    clarifications.push({code:'PERIOD_CLARIFICATION_REQUIRED', question:'Which reporting period should I use (for example this month, last month, this quarter, or last quarter)?'});\n  }\n  if (dimensions.length > 1) {\n    clarifications.push({code:'MULTI_DIMENSION_NOT_SUPPORTED', question:'Please request one breakdown dimension at a time.'});\n  }\n\n  let mode = 'metric_report';\n  if (/\\bwhy\\b/.test(q) && (metricMatches[0] === 'open_pipeline' || /\\bpipeline\\b/.test(q))) {\n    mode = 'diagnostic_report';\n  } else if (dimensions.length === 1) {\n    mode = 'breakdown_report';\n  } else if (/\\b(compare|comparison|compared|versus|vs\\.?)\\b/.test(q)) {\n    mode = 'comparison_report';\n  } else if (/\\b(trend|change|changing|movement|moving)\\b/.test(q)) {\n    mode = 'trend_report';\n  }\n\n  intent = {\n    kpi_key: metricMatches.length === 1 ? metricMatches[0] : null,\n    period_key: periodMatches.length === 1 ? periodMatches[0] : null,\n    mode,\n    dimensions,\n    filters: {}\n  };\n}\n\nreturn {\n  request_id: requestId,\n  correlation_id: correlationId,\n  principal_key: principalKey,\n  authentication_source: authenticationSource,\n  question: typeof body.question === 'string' ? body.question.trim() : null,\n  interpreter_type: interpreterType,\n  structured_intent: intent,\n  validation: {\n    is_valid: errors.length === 0,\n    errors,\n    clarification_required: clarifications.length > 0,\n    clarifications,\n    validated_at: now.toISOString()\n  },\n  should_execute: errors.length === 0 && clarifications.length === 0,\n  workflow_stage: errors.length === 0 && clarifications.length === 0 ? 'agent_intent_ready' : 'agent_clarification_required'\n};"
         },
         "id": "5380b2f4-6a6e-4201-9b25-c1a15401cedc",
         "name": "CTX | Interpret Report Request",
@@ -326,6 +326,121 @@
           -360
         ],
         "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nCTX | Bind Report Service\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nSecurity / Identity Binding\n\nPURPOSE\nOverwrites any caller-supplied principal with the deployment's authenticated service principal and enforces the service body-size budget.\n\nUPSTREAM / INPUT\nDB | Resolve Report Service\n\nDOWNSTREAM / OUTPUT\nCTX | Interpret Report Request\n\nREUSABLE AGENT ROLE\nProvides reusable machine-to-machine identity binding before Agent interpretation.\n\nCONTROL BOUNDARY\nCaller-controlled principal identity is discarded; unmapped services and oversized bodies fail closed.\n\nDOCUMENTATION STATUS\nVerified Agent V2 security node note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "revint-llm-enabled-condition",
+                "leftValue": "={{ $env.REVINT_LLM_ENABLED === 'true' && !$json.body?.structured_intent && typeof $json.body?.question === 'string' && $json.body.question.trim().length > 0 }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "revint-v2-use-llm-intent",
+        "name": "VAL | Use LLM Intent?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          700,
+          120
+        ],
+        "notes": "Optional LLM gate. The model interprets intent only; deterministic controls still authorize execution."
+      },
+      {
+        "parameters": {
+          "jsCode": "const original=$json;\nconst body=original.body&&typeof original.body==='object'&&!Array.isArray(original.body)?original.body:{};\nconst question=typeof body.question==='string'?body.question.trim().slice(0,1000):'';\nconst systemPrompt=[\n'You are the intent interpretation adapter for a governed Revenue Intelligence Agent.',\n'Return JSON only with exactly these keys: kpi_key, period_key, mode, dimensions, filters.',\n'Approved KPI keys: closed_won_revenue, open_pipeline, closed_won_deals, win_rate, open_deals_count, weighted_pipeline, pipeline_coverage_ratio, stale_open_deals_count, stale_pipeline_value, missing_close_date_deals, average_deal_size, closed_lost_deals, loss_rate, average_acv, average_discount_percent, commit_forecast, best_case_forecast, forecast_accuracy, average_sales_cycle_days, average_stage_age_days, pipeline_velocity, quota_attainment, speed_to_lead_hours, follow_up_sla_compliance, overdue_followups, crm_data_quality_score, missing_owner_deals, lead_to_mql_rate, mql_to_sql_rate, sql_to_opportunity_rate, opportunity_to_won_rate, current_mrr, current_arr, expansion_mrr, churned_mrr, net_revenue_retention, gross_revenue_retention.',\n'Approved periods: today, yesterday, this_week, last_week, this_month, last_month, this_quarter, last_quarter, this_year, last_year.',\n'Approved modes: metric_report, trend_report, comparison_report, breakdown_report, diagnostic_report.',\n'Approved dimensions and filter fields: sales_rep, deal_stage, lead_source, segment, region, industry, campaign, forecast_category.',\n'Use at most one dimension. Do not invent filters. Use diagnostic_report only for why open pipeline changed.',\n'Never output SQL, table names, credentials, commentary, markdown, authorization decisions, or database instructions.'\n].join('\\n');\nreturn {__revint_request:original,llm_request_body:{temperature:0,max_completion_tokens:1200,messages:[{role:'system',content:systemPrompt},{role:'user',content:question}]}};"
+        },
+        "id": "revint-v2-prepare-groq-intent",
+        "name": "AI | Prepare Groq Intent Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          940,
+          20
+        ],
+        "notes": "Builds a bounded Groq intent prompt from the authenticated manager question. No SQL, credentials, or authorization are delegated to AI."
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ ($env.REVINT_LLM_BASE_URL || 'https://api.groq.com/openai/v1').replace(/\\/$/, '') + '/chat/completions' }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpHeaderAuth",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Accept",
+                "value": "application/json"
+              },
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "json",
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ ...$json.llm_request_body, model: $env.REVINT_LLM_MODEL || 'openai/gpt-oss-20b' }) }}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json",
+                "neverError": true,
+                "fullResponse": true
+              }
+            },
+            "timeout": "={{ Number($env.REVINT_LLM_TIMEOUT_MS || 15000) }}"
+          }
+        },
+        "id": "revint-v2-groq-interpret-intent",
+        "name": "AI | Groq Interpret Intent",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.5,
+        "position": [
+          1180,
+          20
+        ],
+        "credentials": {
+          "httpHeaderAuth": {
+            "id": "REVINTGROQAI001",
+            "name": "REVINT | Groq AI"
+          }
+        },
+        "retryOnFail": false,
+        "onError": "continueRegularOutput",
+        "notes": "Optional Groq intent call using encrypted Header Auth. Invalid/failed output is never trusted as authorization."
+      },
+      {
+        "parameters": {
+          "jsCode": "const prepared=$('AI | Prepare Groq Intent Request').item.json;\nconst original=prepared.__revint_request??{}; const response=$json??{};\nconst text=String(response.body?.choices?.[0]?.message?.content??response.choices?.[0]?.message?.content??'').trim().replace(/^```(?:json)?\\s*/i,'').replace(/\\s*```$/,'');\nlet parsed=null,reason=null; try{parsed=JSON.parse(text);}catch{reason='LLM_OUTPUT_NOT_JSON';}\nconst allowed=new Set(['kpi_key','period_key','mode','dimensions','filters']);\nlet valid=false;\nif(parsed&&typeof parsed==='object'&&!Array.isArray(parsed)){const keys=Object.keys(parsed);valid=keys.every(k=>allowed.has(k))&&[...allowed].every(k=>keys.includes(k))&&Array.isArray(parsed.dimensions)&&parsed.dimensions.length<=1&&parsed.filters&&typeof parsed.filters==='object'&&!Array.isArray(parsed.filters);}\nif(!valid)return {...original,__revint_llm_status:'fallback',__revint_llm_provider:'groq',__revint_llm_reason:reason??'LLM_OUTPUT_SCHEMA_INVALID'};\nreturn {...original,body:{...(original.body??{}),structured_intent:{kpi_key:typeof parsed.kpi_key==='string'?parsed.kpi_key.trim():'',period_key:typeof parsed.period_key==='string'?parsed.period_key.trim():'',mode:typeof parsed.mode==='string'?parsed.mode.trim():'metric_report',dimensions:parsed.dimensions,filters:parsed.filters}},__revint_llm_status:'used',__revint_llm_provider:'groq'};"
+        },
+        "id": "revint-v2-normalize-groq-intent",
+        "name": "VAL | Normalize Groq Intent",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1420,
+          20
+        ],
+        "notes": "Schema-checks Groq output and maps it into Agent V2 structured_intent. Invalid output falls back to deterministic interpretation."
       }
     ],
     "connections": {
@@ -450,7 +565,7 @@
         "main": [
           [
             {
-              "node": "CTX | Interpret Report Request",
+              "node": "VAL | Use LLM Intent?",
               "type": "main",
               "index": 0
             }
@@ -469,6 +584,57 @@
         ]
       },
       "CTX | Bind Report Service": {
+        "main": [
+          [
+            {
+              "node": "VAL | Use LLM Intent?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Use LLM Intent?": {
+        "main": [
+          [
+            {
+              "node": "AI | Prepare Groq Intent Request",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "CTX | Interpret Report Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI | Prepare Groq Intent Request": {
+        "main": [
+          [
+            {
+              "node": "AI | Groq Interpret Intent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI | Groq Interpret Intent": {
+        "main": [
+          [
+            {
+              "node": "VAL | Normalize Groq Intent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Normalize Groq Intent": {
         "main": [
           [
             {

@@ -24,7 +24,7 @@ Live activation requires a dedicated private-app token and the explicit `REVINT_
 
 The locally verified report execution core. It accepts authenticated report requests, interprets the four currently governed KPIs through a bounded deterministic fallback or a structured-intent contract, calls the PostgreSQL authorization/execution gateway, returns safe clarification or report responses, and writes bounded audit events.
 
-A live LLM model credential is intentionally not embedded in this template. A future model adapter must produce the same structured-intent contract and remains downstream of the same deterministic authorization boundary.
+The template includes an optional Groq intent adapter that is safe-disabled by default. It uses an encrypted runtime credential, produces the same structured-intent contract, and falls back to deterministic interpretation when the model is disabled or its output is invalid. Deterministic authorization remains the final execution gate.
 
 ### REVINT-V2-SCHEDULED-01 — Pipeline Intelligence
 

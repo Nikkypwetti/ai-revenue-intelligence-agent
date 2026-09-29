@@ -80,6 +80,11 @@ services:
       REPORTING_DB_HOST: reporting-db
       REPORTING_DB_PORT: 5432
       REPORTING_DB_NAME: ${REPORTING_DB_NAME:-revenue_reporting}
+      REVINT_LLM_ENABLED: ${REVINT_LLM_ENABLED:-false}
+      REVINT_LLM_PROVIDER: ${REVINT_LLM_PROVIDER:-groq}
+      REVINT_LLM_BASE_URL: ${REVINT_LLM_BASE_URL:-https://api.groq.com/openai/v1}
+      REVINT_LLM_MODEL: ${REVINT_LLM_MODEL:-openai/gpt-oss-20b}
+      REVINT_LLM_TIMEOUT_MS: ${REVINT_LLM_TIMEOUT_MS:-15000}
     volumes:
       - n8n_data:/home/node/.n8n
     healthcheck:
