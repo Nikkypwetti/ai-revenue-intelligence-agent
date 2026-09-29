@@ -1,0 +1,449 @@
+{
+  "id": "REVINTV2DELIVERY01",
+  "name": "REVINT-V2-DELIVERY-01 | Governed Report Delivery",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "f1b822fe-c88f-57b8-b966-3234a936567c",
+      "name": "INT | Governed Delivery Adapter",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -1000,
+        0
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nINT | Governed Delivery Adapter\n\nPURPOSE\nReceives an already-governed report artifact from Agent Core.\n\nCONTROL BOUNDARY\nInternal sub-workflow only; no public webhook.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT to_jsonb(r) AS delivery_authorization FROM governance.resolve_delivery_request($1,$2) r;",
+        "options": {
+          "queryReplacement": "={{ [ $json.delivery_request.principal_key, $json.delivery_request.delivery_key ] }}"
+        }
+      },
+      "id": "3eaa7a9e-94f5-5898-9726-600748b86ea4",
+      "name": "DB | Resolve Delivery Authorization",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -760,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REVINTPGREPORTRO001",
+          "name": "REVINT | Reporting RO"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nDB | Resolve Delivery Authorization\n\nPURPOSE\nResolves tenant, role, enabled state and trusted destination.\n\nCONTROL BOUNDARY\nCaller and AI cannot provide the external destination.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "jsCode": "const original=$('INT | Governed Delivery Adapter').item.json; let a=$json.delivery_authorization ?? null; if(typeof a==='string'){try{a=JSON.parse(a)}catch{a=null}} return {...original,delivery_authorization:a ?? {allowed:false,reason:'DELIVERY_AUTHORIZATION_INVALID'}};"
+      },
+      "id": "914ec3ef-3596-575a-aecb-11ace73bda31",
+      "name": "CTX | Attach Delivery Authorization",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        0
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nCTX | Attach Delivery Authorization\n\nPURPOSE\nReattaches governed delivery policy to the report artifact.\n\nCONTROL BOUNDARY\nDoes not modify report facts or identity.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5ffa1777-4627-5c0d-8760-374cdf3ab550",
+              "leftValue": "={{ $json.delivery_authorization.allowed === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7bdd7196-46d5-5ed7-b2f1-590422f2da9c",
+      "name": "VAL | Delivery Authorized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -280,
+        0
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nVAL | Delivery Authorized?\n\nPURPOSE\nRoutes only authorized delivery to Slack.\n\nCONTROL BOUNDARY\nFail-closed on disabled, tenant, role, or destination failure.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "jsCode": "const d=$json; const a=d.delivery_authorization ?? {}; const b=d.delivery_request?.response_body ?? {}; const r=b.report ?? {}; const p=b.presentation ?? {}; const m=Number(a.max_message_chars ?? 12000); const lines=[]; lines.push('*'+String(p.title ?? r.kpi_key ?? 'Revenue Report').replace(/[<>]/g,'')+'*'); if(p.summary) lines.push(String(p.summary).replace(/[<>]/g,'')); if(Array.isArray(p.key_facts)&&p.key_facts.length) lines.push('*Key facts*\\n'+p.key_facts.slice(0,8).map(x=>'\u2022 '+String(x).replace(/[<>]/g,'')).join('\\n')); const cp=r.current_period ?? {}; if(cp.value!==undefined&&cp.value!==null) lines.push('*Current value:* '+String(cp.value)+(r.currency_code?' '+r.currency_code:(r.unit?' '+r.unit:''))); const rows=p.data?.rows; if(Array.isArray(rows)&&rows.length) lines.push('*Data preview*\\n'+rows.slice(0,10).map(x=>JSON.stringify(x)).join('\\n').slice(0,5000)); const text=lines.join('\\n\\n'); const valid=text.length>0&&text.length<=m&&typeof a.external_destination_id==='string'&&a.external_destination_id.length>0; return {...d,slack_payload:{text,channel_id:a.external_destination_id},delivery_payload_validation:{valid,message_length:text.length,max_message_chars:m}};"
+      },
+      "id": "e2d26667-f87c-550d-aba8-f37768437fe4",
+      "name": "REP | Build Slack Report Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        -120
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nREP | Build Slack Report Payload\n\nPURPOSE\nBuilds a bounded Slack message from the governed presentation artifact.\n\nCONTROL BOUNDARY\nDestination comes only from governance; message size is bounded.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f6f0605e-e750-5153-997d-0adea9510d09",
+              "leftValue": "={{ $json.delivery_payload_validation.valid === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5c350816-a195-5374-b65e-dccd9159da18",
+      "name": "VAL | Slack Payload Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        -120
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nVAL | Slack Payload Valid?\n\nPURPOSE\nValidates the bounded provider payload before external send.\n\nCONTROL BOUNDARY\nInvalid payload never reaches Slack.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "={{ $json.slack_payload.channel_id }}",
+          "mode": "id"
+        },
+        "text": "={{ $json.slack_payload.text }}",
+        "otherOptions": {}
+      },
+      "id": "6972867a-dd96-5b5b-9244-1f8a1d0239b5",
+      "name": "DEL | Send Slack Report",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.7,
+      "position": [
+        500,
+        -180
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "REVINTSLACKREPORT001",
+          "name": "REVINT | Slack Reports"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nDEL | Send Slack Report\n\nPURPOSE\nSends the authorized report to the trusted Slack destination.\n\nCONTROL BOUNDARY\nDedicated Agent V2 credential; cannot choose destination.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "jsCode": "const o=$('REP | Build Slack Report Payload').item.json; const x=$json??{}; return {...o,delivery_result:{status:'delivered',provider:'slack',destination_key:o.delivery_authorization?.destination_key??null,destination_name:o.delivery_authorization?.display_name??null,message_ts:x.ts??x.message?.ts??null,delivered_at:new Date().toISOString()}};"
+      },
+      "id": "38f291c5-28a8-50ac-a205-e2464f4391cc",
+      "name": "CTX | Normalize Slack Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        -180
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nCTX | Normalize Slack Delivery\n\nPURPOSE\nNormalizes the provider response to bounded delivery metadata.\n\nCONTROL BOUNDARY\nRaw provider response is not exposed.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT governance.record_reliable_audit_event($1,$2,$3,$4,$5,$6,$7::jsonb,$8) AS audit_result;",
+        "options": {
+          "queryReplacement": "={{ [ 'EVT-DELIVERY-' + $json.delivery_request.request_id, $json.delivery_request.request_id, $json.delivery_request.correlation_id, 'slack_report_delivered', 'delivery', 'n8n_delivery_adapter', JSON.stringify({principal_key:$json.delivery_request.principal_key,destination_key:$json.delivery_result.destination_key,provider:'slack',status:'delivered'}), 'slack_delivery' ] }}"
+        }
+      },
+      "id": "8fbac3b2-edf7-50a7-968d-7e2f8262fedf",
+      "name": "AUD | Log Slack Delivery",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1000,
+        -180
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REVINTPGAUDITWR001",
+          "name": "REVINT | Audit Writer"
+        }
+      },
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nAUD | Log Slack Delivery\n\nPURPOSE\nRecords successful external delivery with bounded metadata.\n\nCONTROL BOUNDARY\nNo report payload, token, or raw Slack response is persisted.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "jsCode": "const o=$('CTX | Normalize Slack Delivery').item.json; return {delivery_result:o.delivery_result};"
+      },
+      "id": "b28b6087-552a-5a92-9aff-a81a1f7ae018",
+      "name": "REP | Return Delivery Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1240,
+        -180
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nREP | Return Delivery Result\n\nPURPOSE\nReturns bounded delivery status to Agent Core.\n\nCONTROL BOUNDARY\nNo provider secrets leave the adapter.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "jsCode": "const a=$json.delivery_authorization??{}; return {...$json,delivery_result:{status:'not_performed',provider:'slack',reason:a.reason??'DELIVERY_NOT_AUTHORIZED',recorded_at:new Date().toISOString()}};"
+      },
+      "id": "7fdc66c3-8950-5fa9-9d5f-13453a2be359",
+      "name": "REP | Delivery Not Performed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        180
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nREP | Delivery Not Performed\n\nPURPOSE\nBuilds bounded status when delivery is disabled or unauthorized.\n\nCONTROL BOUNDARY\nNo external call.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "jsCode": "return {...$json,delivery_result:{status:'not_performed',provider:'slack',reason:'DELIVERY_PAYLOAD_INVALID',recorded_at:new Date().toISOString()}};"
+      },
+      "id": "2d2c08e0-2695-5352-a319-3e08985cf9f6",
+      "name": "REP | Slack Payload Rejected",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        500,
+        80
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nREP | Slack Payload Rejected\n\nPURPOSE\nStops invalid external payloads.\n\nCONTROL BOUNDARY\nNo external call.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT governance.record_reliable_audit_event($1,$2,$3,$4,$5,$6,$7::jsonb,$8) AS audit_result;",
+        "options": {
+          "queryReplacement": "={{ [ 'EVT-DELIVERY-NOT-' + $json.delivery_request.request_id, $json.delivery_request.request_id, $json.delivery_request.correlation_id, 'delivery_not_performed', 'delivery', 'n8n_delivery_adapter', JSON.stringify({principal_key:$json.delivery_request.principal_key,provider:'slack',reason:$json.delivery_result.reason,status:'not_performed'}), null ] }}"
+        }
+      },
+      "id": "e335d79b-84d0-5b75-b053-28416a4d1c5e",
+      "name": "AUD | Log Delivery Not Performed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        760,
+        160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REVINTPGAUDITWR001",
+          "name": "REVINT | Audit Writer"
+        }
+      },
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nAUD | Log Delivery Not Performed\n\nPURPOSE\nRecords why external delivery did not occur.\n\nCONTROL BOUNDARY\nDoes not broaden authorization.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    },
+    {
+      "parameters": {
+        "jsCode": "const a=$('REP | Delivery Not Performed').isExecuted ? $('REP | Delivery Not Performed').item.json : $('REP | Slack Payload Rejected').item.json; return {delivery_result:a.delivery_result};"
+      },
+      "id": "1d03f8ef-ee79-5be3-8293-3a48dcff00ab",
+      "name": "REP | Return Non-Delivery Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        160
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-DELIVERY-01 | Governed Report Delivery\n\nNODE\nREP | Return Non-Delivery Result\n\nPURPOSE\nReturns bounded non-delivery status to Agent Core.\n\nCONTROL BOUNDARY\nNo internal secrets exposed.\n\nDOCUMENTATION STATUS\nAgent V2 delivery migration \u2014 2026-09-29."
+    }
+  ],
+  "connections": {
+    "INT | Governed Delivery Adapter": {
+      "main": [
+        [
+          {
+            "node": "DB | Resolve Delivery Authorization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB | Resolve Delivery Authorization": {
+      "main": [
+        [
+          {
+            "node": "CTX | Attach Delivery Authorization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CTX | Attach Delivery Authorization": {
+      "main": [
+        [
+          {
+            "node": "VAL | Delivery Authorized?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VAL | Delivery Authorized?": {
+      "main": [
+        [
+          {
+            "node": "REP | Build Slack Report Payload",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "REP | Delivery Not Performed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "REP | Build Slack Report Payload": {
+      "main": [
+        [
+          {
+            "node": "VAL | Slack Payload Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VAL | Slack Payload Valid?": {
+      "main": [
+        [
+          {
+            "node": "DEL | Send Slack Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "REP | Slack Payload Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DEL | Send Slack Report": {
+      "main": [
+        [
+          {
+            "node": "CTX | Normalize Slack Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CTX | Normalize Slack Delivery": {
+      "main": [
+        [
+          {
+            "node": "AUD | Log Slack Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AUD | Log Slack Delivery": {
+      "main": [
+        [
+          {
+            "node": "REP | Return Delivery Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "REP | Delivery Not Performed": {
+      "main": [
+        [
+          {
+            "node": "AUD | Log Delivery Not Performed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "REP | Slack Payload Rejected": {
+      "main": [
+        [
+          {
+            "node": "AUD | Log Delivery Not Performed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AUD | Log Delivery Not Performed": {
+      "main": [
+        [
+          {
+            "node": "REP | Return Non-Delivery Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "errorWorkflow": "REVINTV2SYSERROR01"
+  },
+  "versionId": "79a86df3-6a3d-502a-8bf3-918102b5ebde",
+  "tags": []
+}
