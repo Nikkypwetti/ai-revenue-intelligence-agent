@@ -22,10 +22,10 @@ CONNECTOR_CONFIG_FILE="$ROOT_DIR/config/salesforce-connector.example.json" \
 CONNECTOR_CONFIG_FILE="$ROOT_DIR/config/airtable-funnel-connector.example.json" \
   bash "$ROOT_DIR/scripts/apply-client-connector-config.sh" --validate-only
 
-grep -q "SECURITY DEFINER" "$ROOT_DIR/database/migrations/016_client_crm_connectors.sql"
-grep -q "TO revint_connector_ingest" "$ROOT_DIR/database/migrations/016_client_crm_connectors.sql"
-grep -q "TO revint_governance_ro" "$ROOT_DIR/database/migrations/016_client_crm_connectors.sql"
-grep -q "TO revint_audit_insert" "$ROOT_DIR/database/migrations/016_client_crm_connectors.sql"
+grep -q "SECURITY DEFINER" "$ROOT_DIR/database/migrations/030_client_crm_connectors.sql"
+grep -q "TO revint_connector_ingest" "$ROOT_DIR/database/migrations/030_client_crm_connectors.sql"
+grep -q "TO revint_governance_ro" "$ROOT_DIR/database/migrations/030_client_crm_connectors.sql"
+grep -q "TO revint_audit_insert" "$ROOT_DIR/database/migrations/030_client_crm_connectors.sql"
 grep -q '"mode": "shadow"' "$ROOT_DIR/clients/nikkytechies/client-config.example.json"
 grep -q '"enabled": false' "$ROOT_DIR/config/salesforce-connector.example.json"
 grep -q '"active": false' "$ROOT_DIR/config/airtable-funnel-connector.example.json"
