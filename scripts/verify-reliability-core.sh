@@ -129,32 +129,24 @@ error_workflow_state="$(psql_n8n -c "
   exit 1
 }
 
-retry_state="$(psql_n8n -c "
-  SELECT string_agg(id || ':' || retry_nodes || ':' || all_pg_nodes, ',' ORDER BY id)
-  FROM (
-    SELECT
-      w.id,
-      count(*) FILTER (
-        WHERE n->>'type'='n8n-nodes-base.postgres'
-          AND coalesce((n->>'retryOnFail')::boolean,false)
-          AND coalesce((n->>'maxTries')::integer,0)=3
-          AND coalesce((n->>'waitBetweenTries')::integer,0)=2000
-      )::text AS retry_nodes,
-      count(*) FILTER (
-        WHERE n->>'type'='n8n-nodes-base.postgres'
-      )::text AS all_pg_nodes
-    FROM workflow_entity w
-    CROSS JOIN LATERAL json_array_elements(w.nodes) n
-    WHERE w.id IN (
-      'REVINTV2RESTINGEST01',
-      'REVINTV2AGENTCORE01',
-      'REVINTV2SCHEDULED01',
-      'REVINTV2OBS01'
-    )
-    GROUP BY w.id
-  ) s;
+retry_mismatch="$(psql_n8n -c "
+  SELECT count(*)
+  FROM workflow_entity w
+  CROSS JOIN LATERAL json_array_elements(w.nodes) n
+  WHERE w.id IN (
+    'REVINTV2RESTINGEST01',
+    'REVINTV2AGENTCORE01',
+    'REVINTV2SCHEDULED01',
+    'REVINTV2OBS01'
+  )
+    AND n->>'type'='n8n-nodes-base.postgres'
+    AND NOT (
+      coalesce((n->>'retryOnFail')::boolean,false)
+      AND coalesce((n->>'maxTries')::integer,0)=3
+      AND coalesce((n->>'waitBetweenTries')::integer,0)=2000
+    );
 ")"
-[[ "$retry_state" == "REVINTV2AGENTCORE01:4:4,REVINTV2OBS01:2:2,REVINTV2RESTINGEST01:4:4,REVINTV2SCHEDULED01:2:2" ]] || {
+[[ "$retry_mismatch" == "0" ]] || {
   echo "FAIL: one or more safe PostgreSQL nodes lack the bounded retry policy."
   exit 1
 }
