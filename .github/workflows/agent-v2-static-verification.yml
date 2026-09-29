@@ -1,0 +1,48 @@
+name: Agent V2 Static Verification
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-verification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate JSON files
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for p in Path("config").glob("*.json"):
+              json.loads(p.read_text())
+              print("PASS", p)
+          for p in Path("workflows/runtime-templates").glob("*.json"):
+              json.loads(p.read_text())
+              print("PASS", p)
+          PY
+
+      - name: Bash syntax
+        run: |
+          for f in scripts/*.sh; do
+            bash -n "$f"
+          done
+
+      - name: First-client implementation contract
+        run: bash scripts/verify-first-client-implementation.sh
+
+      - name: Secret-like committed file names
+        run: |
+          if git ls-files | grep -Ei '(^|/)(\.env$|.*\.pem$|.*\.key$|.*credentials.*\.json$)'; then
+            echo "FAIL: secret-like file name is committed"
+            exit 1
+          fi
+          echo "PASS: no secret-like credential files are tracked."
