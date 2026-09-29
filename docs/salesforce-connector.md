@@ -22,9 +22,10 @@ Salesforce Opportunity
 
 Expected n8n credential:
 
-- ID: `REVINTSALESFORCERO001`
 - Name: `REVINT | Salesforce Opportunities RO`
 - Type: `salesforceOAuth2Api`
+
+n8n generates the credential ID when OAuth is created in the UI. The repository workflow keeps `REVINTSALESFORCERO001` only as a template reference. At deployment, the script resolves exactly one encrypted credential by name/type and patches the temporary runtime workflow with the real n8n-generated credential ID before import.
 
 The existing Business OS Salesforce credential must not be copied automatically.
 
