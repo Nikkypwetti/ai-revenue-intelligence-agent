@@ -1,0 +1,104 @@
+name: Agent V2 CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-verification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate shell syntax
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' file; do
+            bash -n "$file"
+          done < <(find scripts -type f -name '*.sh' -print0)
+
+      - name: Validate JSON artifacts
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          for root in ("config","clients","workflows/runtime-templates"):
+              base=Path(root)
+              if not base.exists():
+                  continue
+              for p in base.rglob("*.json"):
+                  json.loads(p.read_text())
+                  print("PASS", p)
+          PY
+
+      - name: Verify runtime workflow notes and safe defaults
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          for p in Path("workflows/runtime-templates").glob("REVINT-V2-*.json"):
+              doc=json.loads(p.read_text())
+              assert isinstance(doc,list) and len(doc)==1, p
+              w=doc[0]
+              nodes=w.get("nodes",[])
+              assert nodes, p
+              missing=[n.get("name") for n in nodes if not str(n.get("notes","")).strip()]
+              assert not missing, f"{p}: missing notes {missing}"
+
+          for name in ("REVINT-V2-SALESFORCE-01.json","REVINT-V2-AIRTABLE-01.json"):
+              w=json.loads((Path("workflows/runtime-templates")/name).read_text())[0]
+              assert w["active"] is False, name
+
+          sf=json.loads(Path("workflows/runtime-templates/REVINT-V2-SALESFORCE-01.json").read_text())[0]
+          sf_source=next(n for n in sf["nodes"] if n["name"]=="SRC | Query Salesforce Opportunities")
+          assert sf_source["parameters"]["resource"]=="search"
+          assert sf_source["parameters"]["operation"]=="query"
+          assert "create" not in sf_source["parameters"]
+          assert "update" not in sf_source["parameters"]
+
+          at=json.loads(Path("workflows/runtime-templates/REVINT-V2-AIRTABLE-01.json").read_text())[0]
+          at_source=next(n for n in at["nodes"] if n["name"]=="SRC | Read Airtable Lead Records")
+          assert at_source["parameters"]["resource"]=="record"
+          assert at_source["parameters"]["operation"]=="search"
+          norm=next(n for n in at["nodes"] if n["name"]=="VAL | Normalize Airtable Funnel")
+          code=norm["parameters"]["jsCode"].lower()
+          for forbidden in ("full name","email","notes","pain point","attachment summary"):
+              assert forbidden not in code, f"Airtable warehouse projection leaks {forbidden}"
+          print("PASS: workflow notes, inactive defaults, read-only source operations and PII minimization.")
+          PY
+
+      - name: Verify client connector configs
+        run: |
+          bash scripts/verify-client-crm-connectors.sh --static-only
+
+      - name: Repository secret-pattern guard
+        run: |
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          roots=[Path("config"),Path("clients"),Path("workflows/runtime-templates"),Path("database"),Path("scripts"),Path("docs")]
+          patterns=[
+              re.compile(r"gsk_[A-Za-z0-9_-]{20,}"),
+              re.compile(r"pat[A-Za-z0-9._-]{20,}"),
+              re.compile(r"sk-[A-Za-z0-9_-]{20,}"),
+              re.compile(r"Bearer\s+[A-Za-z0-9._-]{24,}",re.I),
+          ]
+          hits=[]
+          for root in roots:
+              if not root.exists(): continue
+              for p in root.rglob("*"):
+                  if not p.is_file(): continue
+                  try: text=p.read_text()
+                  except UnicodeDecodeError: continue
+                  for pat in patterns:
+                      if pat.search(text): hits.append(str(p))
+          assert not hits, f"Secret-like values found: {sorted(set(hits))}"
+          print("PASS: no committed live-token patterns detected.")
+          PY
