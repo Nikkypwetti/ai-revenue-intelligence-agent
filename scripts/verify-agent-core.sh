@@ -36,6 +36,11 @@ psql_n8n() {
     -U "$N8N_DB_USER" -d "$N8N_DB_NAME" "$@"
 }
 
+ai_policy_original="$(psql_admin -c "
+  SELECT intent_enabled::int || '|' || summary_enabled::int
+  FROM governance.get_ai_adapter_policy();
+")"
+
 cleanup() {
   psql_admin -c "
     UPDATE governance.service_identity_registry
@@ -66,6 +71,20 @@ cleanup() {
     DELETE FROM governance.department_catalog
     WHERE department_key='verify-agent-sales';
   " >/dev/null 2>&1 || true
+
+  if [[ -n "$ai_policy_original" ]]; then
+    local ai_intent ai_summary intent_flag=false summary_flag=false
+    IFS='|' read -r ai_intent ai_summary <<<"$ai_policy_original"
+    [[ "$ai_intent" == "1" ]] && intent_flag=true
+    [[ "$ai_summary" == "1" ]] && summary_flag=true
+    psql_admin -c "
+      UPDATE governance.ai_adapter_config
+      SET intent_enabled=$intent_flag,
+          summary_enabled=$summary_flag,
+          updated_at=now()
+      WHERE config_id=1;
+    " >/dev/null 2>&1 || true
+  fi
 }
 trap cleanup EXIT
 cleanup
@@ -105,6 +124,13 @@ credential_state="$(psql_n8n -c "
 }
 
 bash "$ROOT_DIR/scripts/verify-runtime-isolation.sh"
+
+psql_admin -c "
+  UPDATE governance.ai_adapter_config
+  SET intent_enabled=false, summary_enabled=false, updated_at=now()
+  WHERE config_id=1;
+" >/dev/null
+echo "PASS: Agent core regression isolated from optional AI/model nondeterminism."
 
 psql_admin <<'SQL' >/dev/null
 INSERT INTO governance.department_catalog (

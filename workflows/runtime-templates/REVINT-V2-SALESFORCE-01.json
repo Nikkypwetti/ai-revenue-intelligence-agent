@@ -1,0 +1,328 @@
+[
+  {
+    "id": "REVINTV2SALESFORCE01",
+    "name": "REVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 15
+              }
+            ]
+          }
+        },
+        "id": "sal01schedule",
+        "name": "INT | Fifteen-Minute Salesforce Sync",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nINT | Fifteen-Minute Salesforce Sync\n\nNODE TYPE\nn8n-nodes-base.scheduleTrigger v1.2\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for Fifteen-Minute Salesforce Sync.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nDB | Load Salesforce Sync Context\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {},
+        "id": "sal02manual",
+        "name": "INT | Manual Salesforce Sync",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nINT | Manual Salesforce Sync\n\nNODE TYPE\nn8n-nodes-base.manualTrigger v1\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for Manual Salesforce Sync.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nDB | Load Salesforce Sync Context\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.get_external_deal_sync_context('salesforce_primary','salesforce_sync') AS sync_context;",
+          "options": {}
+        },
+        "id": "sal03context",
+        "name": "DB | Load Salesforce Sync Context",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          260,
+          10
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nDB | Load Salesforce Sync Context\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nLoads connector activation, watermark, overlap window, currency and reliability/circuit state.\n\nUPSTREAM / INPUT\nINT | Fifteen-Minute Salesforce Sync, INT | Manual Salesforce Sync\n\nDOWNSTREAM / OUTPUT\nCTX | Build Salesforce Search\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nDatabase access is through least-privilege credentials and bounded functions/queries.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const raw=$('DB | Load Salesforce Sync Context').item.json.sync_context;\nconst ctx=typeof raw==='string'?JSON.parse(raw):raw;\nif(!ctx||ctx.connector_key!=='salesforce_primary') throw new Error('SALESFORCE_SYNC_CONTEXT_INVALID');\nlet gate=ctx.reliability_gate;if(typeof gate==='string')gate=JSON.parse(gate);\nconst allowed=gate?.allowed===true;\nreturn {sync_context:ctx,should_sync:allowed,skip_reason:allowed?null:(gate?.reason??'CONNECTOR_NOT_READY')};"
+        },
+        "id": "sal04request",
+        "name": "CTX | Prepare Salesforce Sync",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          10
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nCTX | Build Salesforce Search\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nContext / Interpretation\n\nPURPOSE\nBuilds the bounded incremental Salesforce search window and pagination request from governed sync context.\n\nUPSTREAM / INPUT\nDB | Load Salesforce Sync Context\n\nDOWNSTREAM / OUTPUT\nVAL | Sync Allowed?\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nPrepares bounded context; it cannot authorize arbitrary database execution.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "hs-allowed",
+                "leftValue": "={{ $json.should_sync }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "sal05if",
+        "name": "VAL | Sync Allowed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          780,
+          10
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nVAL | Sync Allowed?\n\nNODE TYPE\nn8n-nodes-base.if v2.3\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nApplies deterministic validation/routing for Sync Allowed?.\n\nUPSTREAM / INPUT\nCTX | Build Salesforce Search\n\nDOWNSTREAM / OUTPUT\nSRC | Fetch Salesforce Deals, SYS | Circuit Open \u2014 Skip Sync\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nFail-closed deterministic control; invalid or unsupported work must not continue.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "resource": "opportunity",
+          "operation": "getAll",
+          "returnAll": true,
+          "options": {}
+        },
+        "id": "sal06api",
+        "name": "SRC | Fetch Salesforce Opportunities",
+        "type": "n8n-nodes-base.salesforce",
+        "typeVersion": 1,
+        "position": [
+          1040,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "salesforceOAuth2Api": {
+            "id": "REVINTSALESFORCERO001",
+            "name": "REVINT | Salesforce Opportunities RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nSRC | Fetch Salesforce Deals\n\nNODE TYPE\nn8n-nodes-base.httpRequest v4.5\n\nLAYER\nSource Adapter\n\nPURPOSE\nReads Salesforce deals through the dedicated read-only Agent V2 credential.\n\nUPSTREAM / INPUT\nVAL | Sync Allowed?\n\nDOWNSTREAM / OUTPUT\nVAL | Normalize Salesforce Deals\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nExternal source access is adapter-specific and should be read-only where possible.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const raw=$('DB | Load Salesforce Sync Context').first().json.sync_context;\nconst ctx=typeof raw==='string'?JSON.parse(raw):raw;\nconst rows=$input.all().map(x=>x.json??{});\nif(rows.length>10000) throw new Error('SALESFORCE_SYNC_RESULT_LIMIT_EXCEEDED');\nconst expected=String(ctx.currency_code??'').trim().toUpperCase();\nconst start=new Date(ctx.query_start_at).getTime(),end=new Date(ctx.query_end_at).getTime();\nconst records=[];let rejected=0,earliest=null;\nconst iso=v=>{if(v===null||v===undefined||v==='')return null;const d=new Date(v);return Number.isNaN(d.getTime())?null:d.toISOString();};\nfor(const r of rows){\n const id=String(r.Id??r.id??'').trim();const amount=Number(r.Amount??0);\n const currency=String(r.CurrencyIsoCode??expected).trim().toUpperCase();\n const stage=String(r.StageName??'').trim();const updated=iso(r.LastModifiedDate);\n if(updated){const ms=new Date(updated).getTime();if(ms<start||ms>end)continue;}\n const close=iso(r.CloseDate),created=iso(r.CreatedDate);\n const won=r.IsWon===true||String(r.IsWon).toLowerCase()==='true'||stage.toLowerCase()==='closed won';\n const closed=r.IsClosed===true||String(r.IsClosed).toLowerCase()==='true'||/^closed\\b/i.test(stage);\n const cat=won?'won':(closed?'lost':'open');\n const valid=id&&Number.isFinite(amount)&&amount>=0&&currency===expected&&stage&&(cat==='open'||close);\n if(!valid){rejected++;const ms=updated?new Date(updated).getTime():null;if(ms!==null&&(earliest===null||ms<earliest))earliest=ms;continue;}\n records.push({source_record_id:id,source_payload:{Name:r.Name??null,Amount:String(amount),CurrencyIsoCode:currency,\n  StageName:stage,OwnerId:r.OwnerId??null,LeadSource:r.LeadSource??null,CreatedDate:created,CloseDate:close,\n  LastModifiedDate:updated,revint_stage_category:cat}});\n}\nlet wm=end;if(rejected>0)wm=earliest===null?start:Math.max(start,earliest);\nreturn [{json:{connector_key:'salesforce_primary',query_start_at:new Date(start).toISOString(),\n query_end_at:new Date(end).toISOString(),watermark:new Date(wm).toISOString(),source_count:rows.length,\n record_count:records.length,rejected_count:rejected,records,event_id:'SALESFORCE-SYNC-'+String(end)}}];"
+        },
+        "id": "sal07normalize",
+        "name": "VAL | Normalize Salesforce Opportunities",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nVAL | Normalize Salesforce Deals\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nMaps source records to the canonical deal contract and deterministically rejects invalid stage/currency/timestamp data.\n\nUPSTREAM / INPUT\nSRC | Fetch Salesforce Deals\n\nDOWNSTREAM / OUTPUT\nDB | Ingest Salesforce Batch\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nFail-closed deterministic control; invalid or unsupported work must not continue.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT ingestion.ingest_deal_batch_from_source($1,$2::jsonb) AS batch_result;",
+          "options": {
+            "queryReplacement": "={{ [ $json.connector_key, JSON.stringify($json.records) ] }}"
+          }
+        },
+        "id": "sal08batch",
+        "name": "DB | Ingest Salesforce Batch",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1560,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGINGESTWR001",
+            "name": "REVINT | Connector Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nDB | Ingest Salesforce Batch\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nWrites validated source records only through the canonical controlled ingestion gateway.\n\nUPSTREAM / INPUT\nVAL | Normalize Salesforce Deals\n\nDOWNSTREAM / OUTPUT\nAUD | Complete Salesforce Sync\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nDatabase access is through least-privilege credentials and bounded functions/queries.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_connector_sync_completion($1,$2,$3::timestamptz,$4::timestamptz,$5::timestamptz,$6::integer,$7::integer,$8::integer) AS sync_result;",
+          "options": {
+            "queryReplacement": "={{ [ $('VAL | Normalize HubSpot Deals').item.json.event_id, $('VAL | Normalize HubSpot Deals').item.json.connector_key, $('VAL | Normalize HubSpot Deals').item.json.query_start_at, $('VAL | Normalize HubSpot Deals').item.json.query_end_at, $('VAL | Normalize HubSpot Deals').item.json.watermark, $('VAL | Normalize HubSpot Deals').item.json.source_count, $('VAL | Normalize HubSpot Deals').item.json.record_count, $('VAL | Normalize HubSpot Deals').item.json.rejected_count ] }}"
+          }
+        },
+        "id": "sal09audit",
+        "name": "AUD | Complete Salesforce Sync",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1820,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nAUD | Complete Salesforce Sync\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nAudit / Traceability\n\nPURPOSE\nRecords completion and advances the incremental watermark only after the governed batch has completed.\n\nUPSTREAM / INPUT\nDB | Ingest Salesforce Batch\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nAppend-only audit/completion responsibility is separated from reporting authority.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {},
+        "id": "sal10skip",
+        "name": "SYS | Circuit Open \u2014 Skip Sync",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1040,
+          160
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nSYS | Circuit Open \u2014 Skip Sync\n\nNODE TYPE\nn8n-nodes-base.noOp v1\n\nLAYER\nReliability / System\n\nPURPOSE\nHandles bounded runtime/reliability behavior for Circuit Open \u2014 Skip Sync.\n\nUPSTREAM / INPUT\nVAL | Sync Allowed?\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nReliability logic is bounded, auditable, and cannot bypass business governance.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      }
+    ],
+    "connections": {
+      "INT | Fifteen-Minute Salesforce Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Salesforce Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "INT | Manual Salesforce Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Salesforce Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Load Salesforce Sync Context": {
+        "main": [
+          [
+            {
+              "node": "CTX | Prepare Salesforce Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Sync Allowed?": {
+        "main": [
+          [
+            {
+              "node": "SRC | Fetch Salesforce Opportunities",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "SYS | Circuit Open \u2014 Skip Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Ingest Salesforce Batch": {
+        "main": [
+          [
+            {
+              "node": "AUD | Complete Salesforce Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Prepare Salesforce Sync": {
+        "main": [
+          [
+            {
+              "node": "VAL | Sync Allowed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SRC | Fetch Salesforce Opportunities": {
+        "main": [
+          [
+            {
+              "node": "VAL | Normalize Salesforce Opportunities",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Normalize Salesforce Opportunities": {
+        "main": [
+          [
+            {
+              "node": "DB | Ingest Salesforce Batch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "pinData": {},
+    "tags": []
+  }
+]

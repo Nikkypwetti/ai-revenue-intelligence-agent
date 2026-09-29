@@ -41,3 +41,6 @@ Thumbs.db
 
 # Client-specific connector mappings
 config/*.local.json
+
+# Private per-client deployment profiles
+config/clients/*.local.json

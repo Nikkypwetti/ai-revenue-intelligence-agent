@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "client_key": "example_client",
+  "company_name": "Example Client",
+  "timezone": "Etc/UTC",
+  "currency_code": "USD",
+  "deployment_mode": "isolated",
+  "public_exposure": false,
+  "connectors": {
+    "hubspot_primary": {"desired_state": "disabled"},
+    "salesforce_primary": {"desired_state": "disabled"},
+    "airtable_primary": {"desired_state": "disabled"}
+  },
+  "domain_readiness": {
+    "deals": "ready_when_connector_validated",
+    "targets": "not_connected",
+    "funnel": "not_connected",
+    "activities": "not_connected",
+    "forecasts": "not_connected",
+    "subscriptions": "not_connected"
+  }
+}
+

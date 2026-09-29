@@ -1,0 +1,366 @@
+[
+  {
+    "id": "REVINTV2AIRTABLE01",
+    "name": "REVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 15
+              }
+            ]
+          }
+        },
+        "id": "air01schedule",
+        "name": "INT | Fifteen-Minute Airtable Sync",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nINT | Fifteen-Minute Airtable Sync\n\nNODE TYPE\nn8n-nodes-base.scheduleTrigger v1.2\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for Fifteen-Minute Airtable Sync.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nDB | Load Airtable Sync Context\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {},
+        "id": "air02manual",
+        "name": "INT | Manual Airtable Sync",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nINT | Manual Airtable Sync\n\nNODE TYPE\nn8n-nodes-base.manualTrigger v1\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nEntry or schedule point for Manual Airtable Sync.\n\nUPSTREAM / INPUT\nWorkflow trigger / external request\n\nDOWNSTREAM / OUTPUT\nDB | Load Airtable Sync Context\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nStarts or accepts work; no business authority is granted at this layer.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.get_external_deal_sync_context('airtable_primary','airtable_sync') AS sync_context;",
+          "options": {}
+        },
+        "id": "air03context",
+        "name": "DB | Load Airtable Sync Context",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          260,
+          10
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nDB | Load Airtable Sync Context\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nLoads connector activation, watermark, overlap window, currency and reliability/circuit state.\n\nUPSTREAM / INPUT\nINT | Fifteen-Minute Airtable Sync, INT | Manual Airtable Sync\n\nDOWNSTREAM / OUTPUT\nCTX | Build Airtable Search\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nDatabase access is through least-privilege credentials and bounded functions/queries.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const raw=$('DB | Load Airtable Sync Context').item.json.sync_context;\nconst ctx=typeof raw==='string'?JSON.parse(raw):raw;\nif(!ctx||ctx.connector_key!=='airtable_primary') throw new Error('AIRTABLE_SYNC_CONTEXT_INVALID');\nlet gate=ctx.reliability_gate;if(typeof gate==='string')gate=JSON.parse(gate);\nconst allowed=gate?.allowed===true;\nreturn {sync_context:ctx,should_sync:allowed,skip_reason:allowed?null:(gate?.reason??'CONNECTOR_NOT_READY')};"
+        },
+        "id": "air04request",
+        "name": "CTX | Prepare Airtable Sync",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          10
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nCTX | Build Airtable Search\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nContext / Interpretation\n\nPURPOSE\nBuilds the bounded incremental Airtable search window and pagination request from governed sync context.\n\nUPSTREAM / INPUT\nDB | Load Airtable Sync Context\n\nDOWNSTREAM / OUTPUT\nVAL | Sync Allowed?\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nPrepares bounded context; it cannot authorize arbitrary database execution.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "hs-allowed",
+                "leftValue": "={{ $json.should_sync }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "air05if",
+        "name": "VAL | Sync Allowed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          780,
+          10
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nVAL | Sync Allowed?\n\nNODE TYPE\nn8n-nodes-base.if v2.3\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nApplies deterministic validation/routing for Sync Allowed?.\n\nUPSTREAM / INPUT\nCTX | Build Airtable Search\n\nDOWNSTREAM / OUTPUT\nSRC | Fetch Airtable Deals, SYS | Circuit Open \u2014 Skip Sync\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nFail-closed deterministic control; invalid or unsupported work must not continue.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ 'https://api.airtable.com/v0/' + encodeURIComponent($('DB | Load Airtable Sync Context').item.json.sync_context.provider_config.base_id) + '/' + encodeURIComponent($('DB | Load Airtable Sync Context').item.json.sync_context.provider_config.opportunities_table_id) }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "airtableTokenApi",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "pageSize",
+                "value": "100"
+              }
+            ]
+          },
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json",
+                "neverError": false,
+                "fullResponse": false
+              }
+            },
+            "pagination": {
+              "pagination": {
+                "paginationMode": "updateAParameterInEachRequest",
+                "parameters": {
+                  "parameters": [
+                    {
+                      "type": "query",
+                      "name": "offset",
+                      "value": "={{ $response.body?.offset }}"
+                    }
+                  ]
+                },
+                "paginationCompleteWhen": "other",
+                "completeExpression": "={{ !$response.body?.offset }}",
+                "limitPagesFetched": true,
+                "maxRequests": 50,
+                "requestInterval": 1100
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "id": "air06api",
+        "name": "SRC | Fetch Airtable Opportunities",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.5,
+        "position": [
+          1040,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "REVINTAIRTABLE001",
+            "name": "REVINT | Airtable Opportunities RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nSRC | Fetch Airtable Deals\n\nNODE TYPE\nn8n-nodes-base.httpRequest v4.5\n\nLAYER\nSource Adapter\n\nPURPOSE\nReads Airtable deals through the dedicated read-only Agent V2 credential.\n\nUPSTREAM / INPUT\nVAL | Sync Allowed?\n\nDOWNSTREAM / OUTPUT\nVAL | Normalize Airtable Deals\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nExternal source access is adapter-specific and should be read-only where possible.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const raw=$('DB | Load Airtable Sync Context').first().json.sync_context;\nconst ctx=typeof raw==='string'?JSON.parse(raw):raw;const cfg=ctx.provider_config??{};\nconst pages=$input.all().map(x=>x.json??{});const rows=pages.flatMap(p=>Array.isArray(p.records)?p.records:[]);\nif(rows.length>10000)throw new Error('AIRTABLE_SYNC_RESULT_LIMIT_EXCEEDED');\nconst expected=String(ctx.currency_code??'').trim().toUpperCase();\nconst won=new Set((cfg.won_stages??['Closed Won']).map(x=>String(x).toLowerCase()));\nconst lost=new Set((cfg.lost_stages??['Closed Lost']).map(x=>String(x).toLowerCase()));\nconst start=new Date(ctx.query_start_at).getTime(),end=new Date(ctx.query_end_at).getTime();\nconst records=[];let rejected=0;\nfor(const r of rows){const f=r.fields??{};const id=String(r.id??'').trim();const amount=Number(f['Deal Value']??0);\n const stage=String(f.Stage??'').trim(),low=stage.toLowerCase();const cat=won.has(low)?'won':(lost.has(low)?'lost':'open');\n const valid=id&&Number.isFinite(amount)&&amount>=0&&stage&&/^[A-Z]{3}$/.test(expected);\n if(!valid){rejected++;continue;}\n records.push({source_record_id:id,source_payload:{'Opportunity Name':f['Opportunity Name']??null,'Deal Value':String(amount),\n  Stage:stage,revint_currency_code:expected,revint_stage_category:cat}});\n}\nreturn [{json:{connector_key:'airtable_primary',query_start_at:new Date(start).toISOString(),\n query_end_at:new Date(end).toISOString(),watermark:new Date(end).toISOString(),source_count:rows.length,\n record_count:records.length,rejected_count:rejected,records,event_id:'AIRTABLE-SYNC-'+String(end)}}];"
+        },
+        "id": "air07normalize",
+        "name": "VAL | Normalize Airtable Opportunities",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nVAL | Normalize Airtable Deals\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nMaps source records to the canonical deal contract and deterministically rejects invalid stage/currency/timestamp data.\n\nUPSTREAM / INPUT\nSRC | Fetch Airtable Deals\n\nDOWNSTREAM / OUTPUT\nDB | Ingest Airtable Batch\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nFail-closed deterministic control; invalid or unsupported work must not continue.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT ingestion.ingest_deal_batch_from_source($1,$2::jsonb) AS batch_result;",
+          "options": {
+            "queryReplacement": "={{ [ $json.connector_key, JSON.stringify($json.records) ] }}"
+          }
+        },
+        "id": "air08batch",
+        "name": "DB | Ingest Airtable Batch",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1560,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGINGESTWR001",
+            "name": "REVINT | Connector Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nDB | Ingest Airtable Batch\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nWrites validated source records only through the canonical controlled ingestion gateway.\n\nUPSTREAM / INPUT\nVAL | Normalize Airtable Deals\n\nDOWNSTREAM / OUTPUT\nAUD | Complete Airtable Sync\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nDatabase access is through least-privilege credentials and bounded functions/queries.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_connector_sync_completion($1,$2,$3::timestamptz,$4::timestamptz,$5::timestamptz,$6::integer,$7::integer,$8::integer) AS sync_result;",
+          "options": {
+            "queryReplacement": "={{ [ $('VAL | Normalize HubSpot Deals').item.json.event_id, $('VAL | Normalize HubSpot Deals').item.json.connector_key, $('VAL | Normalize HubSpot Deals').item.json.query_start_at, $('VAL | Normalize HubSpot Deals').item.json.query_end_at, $('VAL | Normalize HubSpot Deals').item.json.watermark, $('VAL | Normalize HubSpot Deals').item.json.source_count, $('VAL | Normalize HubSpot Deals').item.json.record_count, $('VAL | Normalize HubSpot Deals').item.json.rejected_count ] }}"
+          }
+        },
+        "id": "air09audit",
+        "name": "AUD | Complete Airtable Sync",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1820,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nAUD | Complete Airtable Sync\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nAudit / Traceability\n\nPURPOSE\nRecords completion and advances the incremental watermark only after the governed batch has completed.\n\nUPSTREAM / INPUT\nDB | Ingest Airtable Batch\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nAppend-only audit/completion responsibility is separated from reporting authority.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      },
+      {
+        "parameters": {},
+        "id": "air10skip",
+        "name": "SYS | Circuit Open \u2014 Skip Sync",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1040,
+          160
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nSYS | Circuit Open \u2014 Skip Sync\n\nNODE TYPE\nn8n-nodes-base.noOp v1\n\nLAYER\nReliability / System\n\nPURPOSE\nHandles bounded runtime/reliability behavior for Circuit Open \u2014 Skip Sync.\n\nUPSTREAM / INPUT\nVAL | Sync Allowed?\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nReliability logic is bounded, auditable, and cannot bypass business governance.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
+      }
+    ],
+    "connections": {
+      "INT | Fifteen-Minute Airtable Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Airtable Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "INT | Manual Airtable Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Airtable Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Load Airtable Sync Context": {
+        "main": [
+          [
+            {
+              "node": "CTX | Prepare Airtable Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Sync Allowed?": {
+        "main": [
+          [
+            {
+              "node": "SRC | Fetch Airtable Opportunities",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "SYS | Circuit Open \u2014 Skip Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Ingest Airtable Batch": {
+        "main": [
+          [
+            {
+              "node": "AUD | Complete Airtable Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Prepare Airtable Sync": {
+        "main": [
+          [
+            {
+              "node": "VAL | Sync Allowed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SRC | Fetch Airtable Opportunities": {
+        "main": [
+          [
+            {
+              "node": "VAL | Normalize Airtable Opportunities",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Normalize Airtable Opportunities": {
+        "main": [
+          [
+            {
+              "node": "DB | Ingest Airtable Batch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "pinData": {},
+    "tags": []
+  }
+]

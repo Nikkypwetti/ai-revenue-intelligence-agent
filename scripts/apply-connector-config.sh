@@ -35,7 +35,7 @@ connectors = doc.get("connectors")
 if not isinstance(connectors, list) or not connectors:
     raise SystemExit("FAIL: connector config must contain at least one connector.")
 
-allowed_types = {"hubspot","salesforce","postgresql","google_sheets","billing","rest_api"}
+allowed_types = {"hubspot","salesforce","airtable","postgresql","google_sheets","billing","rest_api"}
 allowed_fields = {
     "deal_name","amount","currency_code","stage_name","stage_category",
     "sales_rep","lead_source","created_at","expected_close_date",

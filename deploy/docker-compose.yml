@@ -195,8 +195,11 @@ services:
 
 volumes:
   n8n_data:
+    name: ${N8N_DATA_VOLUME_NAME:-${COMPOSE_PROJECT_NAME:-revint-agent}_n8n_data}
   n8n_db_data:
+    name: ${N8N_DB_VOLUME_NAME:-${COMPOSE_PROJECT_NAME:-revint-agent}_n8n_db_data}
   reporting_db_data:
+    name: ${REPORTING_DB_VOLUME_NAME:-${COMPOSE_PROJECT_NAME:-revint-agent}_reporting_db_data}
 
 networks:
   agent_private:

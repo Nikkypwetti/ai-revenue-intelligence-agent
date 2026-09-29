@@ -1,0 +1,46 @@
+name: Agent V2 CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Shell syntax and reusable contract checks
+        run: bash scripts/ci-validate.sh
+
+      - name: Shellcheck client/source scripts
+        run: |
+          shellcheck -e SC1090 -x \
+            scripts/init-client-source-adapters.sh \
+            scripts/stage-client-source-adapters.sh \
+            scripts/import-airtable-runtime-credential.sh \
+            scripts/activate-client-source-connector.sh \
+            scripts/verify-client-source-adapters.sh \
+            scripts/verify-bounded-load-security.sh \
+            scripts/verify-ai-provider-failsoft-live.sh
+
+      - name: Fail-closed example client profile
+        run: |
+          python3 - <<'PY'
+          import json
+          profile=json.load(open('config/clients/client-deployment.example.json'))
+          assert profile['deployment_mode']=='isolated'
+          assert profile['public_exposure'] is False
+          assert all(v['desired_state']=='disabled' for v in profile['connectors'].values())
+          print('PASS: example client deployment is fail-closed.')
+          PY
+
