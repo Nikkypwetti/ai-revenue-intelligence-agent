@@ -20,12 +20,35 @@ subject_max="${EMAIL_REPORT_MAX_SUBJECT_CHARS:-180}"; body_max="${EMAIL_REPORT_M
 
 compose=(docker compose -p "${COMPOSE_PROJECT_NAME:-revint-agent}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 bash "$ROOT_DIR/scripts/init-email-delivery.sh"
-state="$("${compose[@]}" exec -T n8n-db psql -X -q -A -t -U "$N8N_DB_USER" -d "$N8N_DB_NAME" -c "SELECT count(*) || '|' || count(*) FILTER (WHERE data NOT LIKE '{%') FROM credentials_entity WHERE id='REVINTGMAILREPORT001' AND type='gmailOAuth2';")"
-[[ "$state" == "1|1" ]] || fail "dedicated encrypted Gmail credential REVINTGMAILREPORT001 is missing."
+credential_row="$("${compose[@]}" exec -T n8n-db psql -X -q -A -t -F '|' -U "$N8N_DB_USER" -d "$N8N_DB_NAME" -c "
+SELECT id, count(*) OVER (), (data NOT LIKE '{%')::int
+FROM credentials_entity
+WHERE name='REVINT | Gmail Reports' AND type='gmailOAuth2';
+")"
+[[ -n "$credential_row" ]] || fail "dedicated Gmail credential named REVINT | Gmail Reports is missing."
+IFS='|' read -r gmail_credential_id gmail_credential_count gmail_encrypted <<< "$credential_row"
+[[ "$gmail_credential_count" == "1" && "$gmail_encrypted" == "1" ]] || fail "Gmail credential must exist exactly once and be stored encrypted."
+
+tmp_workflow="$(mktemp)"
+trap 'rm -f "$tmp_workflow"; "${compose[@]}" up -d n8n >/dev/null 2>&1 || true' EXIT
+python3 - "$WORKFLOW" "$tmp_workflow" "$gmail_credential_id" <<'PY'
+import json,sys
+src,dst,credential_id=sys.argv[1:4]
+doc=json.load(open(src))
+found=False
+for workflow in doc:
+    for node in workflow.get("nodes",[]):
+        if node.get("name")=="DEL | Send Gmail Report":
+            node["credentials"]["gmailOAuth2"]["id"]=credential_id
+            node["credentials"]["gmailOAuth2"]["name"]="REVINT | Gmail Reports"
+            found=True
+if not found:
+    raise SystemExit("FAIL: Gmail delivery node not found.")
+json.dump(doc,open(dst,"w"),indent=2)
+PY
 
 "${compose[@]}" stop n8n >/dev/null
-trap '"${compose[@]}" up -d n8n >/dev/null 2>&1 || true' EXIT
-cat "$WORKFLOW" | "${compose[@]}" run --rm --no-deps -T n8n import:workflow --input=/dev/stdin >/dev/null
+cat "$tmp_workflow" | "${compose[@]}" run --rm --no-deps -T n8n import:workflow --input=/dev/stdin >/dev/null
 "${compose[@]}" run --rm --no-deps -T n8n publish:workflow --id=REVINTV2EMAIL01 >/dev/null
 "${compose[@]}" up -d n8n >/dev/null
 for i in $(seq 1 40); do if curl -fsS --max-time 3 "http://127.0.0.1:${N8N_PORT:-5681}/healthz" >/dev/null 2>&1; then break; fi; [[ "$i" -lt 40 ]] || fail "Agent V2 did not recover."; sleep 2; done
