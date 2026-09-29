@@ -99,6 +99,8 @@ an={n['name'] for n in agent['nodes']}
 assert {'CTX | Prepare Delivery Request','DEL | Run Governed Delivery Adapter'} <= an
 code=next(n for n in agent['nodes'] if n['name']=='CTX | Interpret Report Request')['parameters']['jsCode']
 assert "delivery_channel must be api or slack" in code
+ret=next(n for n in agent['nodes'] if n['name']=='DEL | Return Report Response')
+assert "CTX | Attach Delivery Result" in ret['parameters']['responseBody']
 print('PASS: delivery workflow structure and Agent Core wiring are bounded.')
 PY
 

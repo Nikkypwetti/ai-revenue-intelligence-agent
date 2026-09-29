@@ -150,9 +150,9 @@
       {
         "parameters": {
           "respondWith": "json",
-          "responseBody": "={{ $('REP | Build Presentation Artifact').item.json.response_body }}",
+          "responseBody": "={{ $('CTX | Attach Delivery Result').isExecuted ? $('CTX | Attach Delivery Result').item.json.response_body : $('REP | Build Presentation Artifact').item.json.response_body }}",
           "options": {
-            "responseCode": "={{ $('REP | Build Presentation Artifact').item.json.http_status }}"
+            "responseCode": "={{ $('CTX | Attach Delivery Result').isExecuted ? $('CTX | Attach Delivery Result').item.json.http_status : $('REP | Build Presentation Artifact').item.json.http_status }}"
           }
         },
         "id": "01ce8ff2-d9d1-49e0-ac50-4f9395e9c8a1",
