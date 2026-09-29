@@ -8,6 +8,7 @@ MIGRATION="$ROOT_DIR/database/migrations/017_incident_notifications.sql"
 SEED="$ROOT_DIR/database/seeds/010_incident_notification_reliability.sql"
 ENV_EXAMPLE="$ROOT_DIR/deploy/.env.example"
 DEPLOY="$ROOT_DIR/scripts/deploy-incident-notifications.sh"
+IMPORT_CRED="$ROOT_DIR/scripts/import-incident-slack-credential.sh"
 
 python3 - "$WORKFLOW" "$SYS_WORKFLOW" "$MIGRATION" "$SEED" <<'PY'
 import json,re,sys
@@ -66,7 +67,7 @@ done
 
 grep -q '^INCIDENT_SLACK_ENABLED=false$' "$ENV_EXAMPLE"
 grep -q '^INCIDENT_MIN_SEVERITY=warning$' "$ENV_EXAMPLE"
-grep -q 'REVINTSLACKINCIDENT001' "$DEPLOY"
+grep -q 'REVINTSLACKINCIDENT001' "$IMPORT_CRED"
 grep -q 'enabled=false' "$DEPLOY"
 grep -q 'enabled=true' "$DEPLOY"
 grep -q 'stop n8n' "$DEPLOY"
