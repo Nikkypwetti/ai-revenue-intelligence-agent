@@ -1,0 +1,37 @@
+{
+  "client_key": "nikkytechies",
+  "company_name": "NikkyTechies",
+  "timezone": "Africa/Lagos",
+  "currency_code": "USD",
+  "deployment_mode": "isolated",
+  "public_deployment": {
+    "enabled": false,
+    "reason": "Domain and VPS intentionally deferred until a real client deployment."
+  },
+  "sources": {
+    "hubspot_primary": {
+      "domain": "deals",
+      "mode": "authoritative",
+      "enabled": true
+    },
+    "salesforce_primary": {
+      "domain": "deals",
+      "mode": "shadow",
+      "enabled": false
+    },
+    "airtable_leads": {
+      "domain": "funnel",
+      "mode": "authoritative",
+      "enabled": false,
+      "blocked_reason": "Airtable monthly API plan limit currently exceeded."
+    }
+  },
+  "data_domains": {
+    "deals": "ready",
+    "targets": "not_ready",
+    "funnel": "pending_airtable",
+    "activities": "not_ready",
+    "forecasts": "not_ready",
+    "subscriptions": "not_ready"
+  }
+}
