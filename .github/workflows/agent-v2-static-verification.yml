@@ -51,6 +51,9 @@ jobs:
       - name: Power BI handoff contract
         run: bash scripts/verify-powerbi-handoff-static.sh
 
+      - name: Airtable and email adapter contracts
+        run: bash scripts/verify-airtable-email-static.sh
+
       - name: Secret-like committed file names
         run: |
           if git ls-files | grep -Ei '(^|/)(\.env$|.*\.pem$|.*\.key$|.*credentials.*\.json$)'; then
