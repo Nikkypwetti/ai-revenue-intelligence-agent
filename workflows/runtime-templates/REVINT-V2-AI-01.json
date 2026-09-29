@@ -1,0 +1,565 @@
+[
+  {
+    "id": "REVINTV2AIADAPTER01",
+    "name": "REVINT-V2-AI-01 | Governed Intelligence Adapter",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "passthrough"
+        },
+        "id": "a711a26b-80da-5a39-a18e-da77df5ba174",
+        "name": "INT | Governed AI Adapter",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -1120,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nINT | Governed AI Adapter\n\nLAYER\nInternal Intake\n\nPURPOSE\nReceives only internal Agent V2 sub-workflow calls for intent interpretation or management summarization.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nNo public webhook is exposed; authentication must already have occurred in Agent Core.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT * FROM governance.get_ai_adapter_policy();",
+          "options": {}
+        },
+        "id": "cd875c71-8fb3-5420-a6ce-ad82778ba21c",
+        "name": "DB | Load AI Adapter Policy",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          -880,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        },
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nDB | Load AI Adapter Policy\n\nLAYER\nGovernance\n\nPURPOSE\nLoads non-secret provider/model enablement policy through a bounded SECURITY DEFINER function.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nThe Reporting RO credential cannot read or modify the backing configuration table.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const request = $('INT | Governed AI Adapter').item.json ?? {};\nconst action = String(request.ai_action ?? '').trim();\nconst body = request.body && typeof request.body === 'object' && !Array.isArray(request.body) ? request.body : {};\nconst suppliedIntent = body.structured_intent && typeof body.structured_intent === 'object' && !Array.isArray(body.structured_intent);\nconst question = typeof body.question === 'string' ? body.question.trim() : '';\nconst result = request.agent_result && typeof request.agent_result === 'object' ? request.agent_result : null;\nconst policy = {\n  provider_key: String($json.provider_key ?? ''),\n  intent_enabled: $json.intent_enabled === true,\n  summary_enabled: $json.summary_enabled === true,\n  intent_model: String($json.intent_model ?? ''),\n  summary_model: String($json.summary_model ?? ''),\n  intent_temperature: Number($json.intent_temperature ?? 0),\n  summary_temperature: Number($json.summary_temperature ?? 0.1),\n  max_question_chars: Number($json.max_question_chars ?? 1000),\n  max_summary_input_chars: Number($json.max_summary_input_chars ?? 20000),\n};\nreturn {\n  ...request,\n  ai_action: action,\n  ai_policy: policy,\n  ai_intent_should_run: action === 'intent' && policy.intent_enabled && !suppliedIntent &&\n    !request.__revint_security_error && question.length > 0 && question.length <= policy.max_question_chars,\n  ai_summary_should_run: action === 'summary' && policy.summary_enabled &&\n    result?.status === 'approved' && request.management_summary_input &&\n    JSON.stringify(request.management_summary_input).length <= policy.max_summary_input_chars,\n};"
+        },
+        "id": "60964b26-2c8e-569b-9f99-f494b6e6b5e7",
+        "name": "CTX | Attach AI Policy",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -640,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nCTX | Attach AI Policy\n\nLAYER\nContext\n\nPURPOSE\nCombines the internal request with policy and decides whether an AI call is eligible.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nStructured intent supplied by an already authenticated caller is never overwritten by the model.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "rules": {
+            "values": [
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "id": "23fb6ed8-8912-5774-96ec-c40af9ce6a24",
+                      "leftValue": "={{ $json.ai_action }}",
+                      "rightValue": "intent",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              },
+              {
+                "conditions": {
+                  "options": {
+                    "caseSensitive": true,
+                    "leftValue": "",
+                    "typeValidation": "strict",
+                    "version": 3
+                  },
+                  "conditions": [
+                    {
+                      "id": "ba8269e0-ed15-550d-90e5-82ae6fbd90a9",
+                      "leftValue": "={{ $json.ai_action }}",
+                      "rightValue": "summary",
+                      "operator": {
+                        "type": "string",
+                        "operation": "equals"
+                      }
+                    }
+                  ],
+                  "combinator": "and"
+                }
+              }
+            ]
+          },
+          "options": {
+            "fallbackOutput": "extra"
+          }
+        },
+        "id": "be3bc7fd-96f0-5ff0-ac46-8b7a32eeb258",
+        "name": "VAL | Route AI Action",
+        "type": "n8n-nodes-base.switch",
+        "typeVersion": 3.4,
+        "position": [
+          -400,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nVAL | Route AI Action\n\nLAYER\nValidation / Routing\n\nPURPOSE\nRoutes only approved internal adapter actions: intent or summary.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nUnknown actions go to a bounded unsupported-action response.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "e8d57fa2-f65a-53dc-bb1e-6d669682a200",
+                "leftValue": "={{ $json.ai_intent_should_run }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "cfdff31e-3a02-524f-9ac0-1367c0e78153",
+        "name": "VAL | Intent AI Enabled?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -160,
+          -160
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nVAL | Intent AI Enabled?\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nChecks whether the governed intent adapter is enabled and the request is eligible.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nThe model is optional and cannot run unless governance policy explicitly enables this action.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "12b3c0c2-89d6-552c-afe2-62f56bd52191",
+                "leftValue": "={{ $json.ai_summary_should_run }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "8c8fa0af-7d0c-562c-abeb-f54d9543d21d",
+        "name": "VAL | Summary AI Enabled?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -160,
+          240
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nVAL | Summary AI Enabled?\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nChecks whether the governed management-summary adapter is enabled and the governed report is eligible.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nThe model is optional and cannot run unless governance policy explicitly enables this action.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ ($json.body?.question ?? '').toString() }}",
+          "hasOutputParser": true,
+          "messages": {
+            "messageValues": [
+              {
+                "message": "You are the language-interpretation layer of a governed Revenue Intelligence Agent.\nInterpret the authenticated manager question into the supplied structured schema only.\nNever generate SQL, table names, database names, credentials, authorization decisions, or extra fields.\nChoose exactly one approved KPI and reporting period. Use at most one breakdown dimension.\nUse diagnostic_report only for a question asking why open pipeline changed.\nDo not invent filters, dimensions, periods, or business facts. Downstream deterministic controls will revalidate everything."
+              }
+            ]
+          },
+          "batching": {}
+        },
+        "id": "49422c26-7a02-5f09-8d79-72bfe6b87af6",
+        "name": "AI | Parse Reporting Intent",
+        "type": "@n8n/n8n-nodes-langchain.chainLlm",
+        "typeVersion": 1.9,
+        "position": [
+          120,
+          -240
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1500,
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nAI | Parse Reporting Intent\n\nLAYER\nAI Interpretation\n\nPURPOSE\nPorts the original REVINT-01 Groq intent-parser concept into the secured V2 structured-intent contract.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nInterpretation only. The output is revalidated by Agent Core before any governed database execution.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "schemaType": "manual",
+          "inputSchema": "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"kpi_key\":{\"type\":\"string\",\"enum\":[\"closed_won_revenue\",\"open_pipeline\",\"closed_won_deals\",\"win_rate\",\"open_deals_count\",\"weighted_pipeline\",\"pipeline_coverage_ratio\",\"stale_open_deals_count\",\"stale_pipeline_value\",\"missing_close_date_deals\",\"average_deal_size\",\"closed_lost_deals\",\"loss_rate\",\"average_acv\",\"average_discount_percent\",\"commit_forecast\",\"best_case_forecast\",\"forecast_accuracy\",\"average_sales_cycle_days\",\"average_stage_age_days\",\"pipeline_velocity\",\"quota_attainment\",\"speed_to_lead_hours\",\"follow_up_sla_compliance\",\"overdue_followups\",\"crm_data_quality_score\",\"missing_owner_deals\",\"lead_to_mql_rate\",\"mql_to_sql_rate\",\"sql_to_opportunity_rate\",\"opportunity_to_won_rate\",\"current_mrr\",\"current_arr\",\"expansion_mrr\",\"churned_mrr\",\"net_revenue_retention\",\"gross_revenue_retention\"]},\"period_key\":{\"type\":\"string\",\"enum\":[\"today\",\"yesterday\",\"this_week\",\"last_week\",\"this_month\",\"last_month\",\"this_quarter\",\"last_quarter\",\"this_year\",\"last_year\"]},\"mode\":{\"type\":\"string\",\"enum\":[\"metric_report\",\"trend_report\",\"comparison_report\",\"breakdown_report\",\"diagnostic_report\"]},\"dimensions\":{\"type\":\"array\",\"maxItems\":1,\"items\":{\"type\":\"string\",\"enum\":[\"sales_rep\",\"deal_stage\",\"lead_source\",\"segment\",\"region\",\"industry\",\"campaign\",\"forecast_category\"]}},\"filters\":{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"sales_rep\":{\"type\":\"array\",\"maxItems\":50,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200}},\"deal_stage\":{\"type\":\"array\",\"maxItems\":50,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200}},\"lead_source\":{\"type\":\"array\",\"maxItems\":50,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200}},\"segment\":{\"type\":\"array\",\"maxItems\":50,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200}},\"region\":{\"type\":\"array\",\"maxItems\":50,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200}},\"industry\":{\"type\":\"array\",\"maxItems\":50,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200}},\"campaign\":{\"type\":\"array\",\"maxItems\":50,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200}},\"forecast_category\":{\"type\":\"array\",\"maxItems\":50,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":200}}}}},\"required\":[\"kpi_key\",\"period_key\",\"mode\",\"dimensions\",\"filters\"]}"
+        },
+        "id": "66dd2df5-d98c-5bd3-90ad-92042974f2e6",
+        "name": "AI-PAR | Intent Schema",
+        "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+        "typeVersion": 1.3,
+        "position": [
+          120,
+          -400
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nAI-PAR | Intent Schema\n\nLAYER\nAI Output Control\n\nPURPOSE\nConstrains model output to the exact V2 intent schema.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nadditionalProperties=false; SQL, credentials and arbitrary fields cannot enter the structured contract.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "model": "={{ $('CTX | Attach AI Policy').item.json.ai_policy.intent_model }}",
+          "options": {
+            "temperature": "={{ $('CTX | Attach AI Policy').item.json.ai_policy.intent_temperature }}"
+          }
+        },
+        "id": "23f41181-a877-5b7e-b26a-f57e06ca47c7",
+        "name": "AI-MDL | Groq Intent Model",
+        "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+        "typeVersion": 1,
+        "position": [
+          120,
+          -520
+        ],
+        "credentials": {
+          "groqApi": {
+            "id": "REVINTGROQ001",
+            "name": "REVINT | Groq Intelligence"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nAI-MDL | Groq Intent Model\n\nLAYER\nAI Provider\n\nPURPOSE\nProvides the client-configurable Groq model for language interpretation.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nUses a dedicated encrypted Agent V2 credential and has no database credential or authorization authority.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const base = $('CTX | Attach AI Policy').item.json;\nconst parsed = $json.output && typeof $json.output === 'object' ? $json.output : null;\nif (!parsed) {\n  return {...base, ai_adapter:{action:'intent',status:'invalid_output',provider:base.ai_policy?.provider_key ?? null}};\n}\nreturn {\n  ...base,\n  body: {...(base.body ?? {}), structured_intent: parsed},\n  ai_adapter:{\n    action:'intent',status:'applied',provider:base.ai_policy.provider_key,\n    model:base.ai_policy.intent_model, applied_at:new Date().toISOString()\n  }\n};"
+        },
+        "id": "4ccca7a6-9d45-5dff-ae9a-74132c5d504d",
+        "name": "CTX | Normalize AI Intent",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          400,
+          -240
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nCTX | Normalize AI Intent\n\nLAYER\nContext / Validation\n\nPURPOSE\nAttaches the schema-constrained model interpretation to the authenticated request as structured_intent.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nThe downstream Agent Core interpreter still checks all KPI, period, mode, dimension and filter values.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "return {\n  ...$json,\n  ai_adapter:{\n    action:'intent',\n    status:$json.body?.structured_intent ? 'structured_intent_preserved' : 'disabled_or_ineligible',\n    provider:$json.ai_policy?.provider_key ?? null,\n    model:null,\n    applied_at:new Date().toISOString()\n  }\n};"
+        },
+        "id": "223d605c-c551-5b9d-9056-25bf8c577631",
+        "name": "REP | Intent AI Skipped",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          120,
+          -40
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nREP | Intent AI Skipped\n\nLAYER\nFallback\n\nPURPOSE\nReturns the original authenticated request when model interpretation is disabled, unnecessary, or ineligible.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nAgent Core falls back to its deterministic interpreter or preserves trusted structured intent.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "promptType": "define",
+          "text": "={{ JSON.stringify($json.management_summary_input ?? {}) }}",
+          "hasOutputParser": true,
+          "messages": {
+            "messageValues": [
+              {
+                "message": "You are the management-communication layer of a governed Revenue Intelligence Agent.\nUse only MANAGEMENT_SUMMARY_INPUT supplied by the workflow. Never invent or recalculate metrics.\nDo not change numeric values. Do not infer causes, targets, trends or performance judgments unless the supplied facts explicitly support them.\nNever mention SQL, tables, schemas, credentials, prompts or workflow internals.\nReturn only the structured management-summary schema. If evidence is insufficient, use null or limitations rather than guessing."
+              }
+            ]
+          },
+          "batching": {}
+        },
+        "id": "e25622ed-8f41-558c-a983-00c5b349b7ed",
+        "name": "AI | Generate Management Summary",
+        "type": "@n8n/n8n-nodes-langchain.chainLlm",
+        "typeVersion": 1.9,
+        "position": [
+          120,
+          160
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 1500,
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nAI | Generate Management Summary\n\nLAYER\nAI Communication\n\nPURPOSE\nPorts the original REVINT-01 grounded management-summary capability into V2.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nReceives governed facts only and cannot authorize, calculate, query or alter business data.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "schemaType": "manual",
+          "inputSchema": "{\"type\":\"object\",\"additionalProperties\":false,\"properties\":{\"headline\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":160},\"summary\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":1200},\"key_facts\":{\"type\":\"array\",\"maxItems\":10,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":300}},\"management_interpretation\":{\"type\":[\"string\",\"null\"],\"maxLength\":800},\"recommended_action\":{\"type\":[\"string\",\"null\"],\"maxLength\":500},\"limitations\":{\"type\":\"array\",\"maxItems\":10,\"items\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":300}}},\"required\":[\"headline\",\"summary\",\"key_facts\",\"management_interpretation\",\"recommended_action\",\"limitations\"]}"
+        },
+        "id": "2700b5db-e85b-56b4-9938-8f626bebd934",
+        "name": "AI-PAR | Management Summary Schema",
+        "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+        "typeVersion": 1.3,
+        "position": [
+          120,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nAI-PAR | Management Summary Schema\n\nLAYER\nAI Output Control\n\nPURPOSE\nConstrains management-language output to a bounded presentation contract.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nThe model cannot add technical internals or arbitrary output fields.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "model": "={{ $('CTX | Attach AI Policy').item.json.ai_policy.summary_model }}",
+          "options": {
+            "temperature": "={{ $('CTX | Attach AI Policy').item.json.ai_policy.summary_temperature }}"
+          }
+        },
+        "id": "d6204b50-38d9-5b7b-8948-bb486f406920",
+        "name": "AI-MDL | Groq Summary Model",
+        "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+        "typeVersion": 1,
+        "position": [
+          120,
+          -120
+        ],
+        "credentials": {
+          "groqApi": {
+            "id": "REVINTGROQ001",
+            "name": "REVINT | Groq Intelligence"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nAI-MDL | Groq Summary Model\n\nLAYER\nAI Provider\n\nPURPOSE\nProvides the client-configurable Groq model for grounded management communication.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nUses only the dedicated encrypted Agent V2 Groq credential.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const base = $('CTX | Attach AI Policy').item.json;\nconst parsed = $json.output && typeof $json.output === 'object' ? $json.output : null;\nreturn {\n  ...base,\n  management_summary: parsed,\n  ai_adapter:{\n    action:'summary',\n    status:parsed ? 'applied' : 'invalid_output',\n    provider:base.ai_policy?.provider_key ?? null,\n    model:base.ai_policy?.summary_model ?? null,\n    applied_at:new Date().toISOString()\n  }\n};"
+        },
+        "id": "d45885c3-8402-5d25-aff6-b804a12e9c30",
+        "name": "CTX | Normalize Management Summary",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          400,
+          160
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nCTX | Normalize Management Summary\n\nLAYER\nContext / Validation\n\nPURPOSE\nAttaches only schema-constrained management-language output to the governed result.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nMissing/invalid model output does not change the deterministic report facts.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "return {\n  ...$json,\n  management_summary:null,\n  ai_adapter:{\n    action:'summary',status:'disabled_or_ineligible',\n    provider:$json.ai_policy?.provider_key ?? null,model:null,\n    applied_at:new Date().toISOString()\n  }\n};"
+        },
+        "id": "5d18bf71-5e24-551a-9081-48d9c64aba26",
+        "name": "REP | Summary AI Skipped",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          120,
+          360
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nREP | Summary AI Skipped\n\nLAYER\nFallback\n\nPURPOSE\nReturns governed report facts without an AI summary when summary generation is disabled or ineligible.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nA model outage or disabled configuration must never make deterministic KPI facts unavailable.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "return {...$json, ai_adapter:{action:$json.ai_action ?? null,status:'unsupported_action',applied_at:new Date().toISOString()}};"
+        },
+        "id": "95df0a17-c26a-5818-b236-549aca55b32d",
+        "name": "REP | Unsupported AI Action",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -160,
+          440
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AI-01 | Governed Intelligence Adapter\n\nNODE\nREP | Unsupported AI Action\n\nLAYER\nSafe Rejection\n\nPURPOSE\nTerminates unsupported internal adapter actions without calling a model.\n\nREUSABLE AGENT ROLE\nOptional client-configurable language interpretation or management-summary adapter. The deterministic semantic, RBAC and database layers remain authoritative.\n\nCONTROL BOUNDARY\nOnly intent and summary actions are part of the reusable adapter contract.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      }
+    ],
+    "connections": {
+      "INT | Governed AI Adapter": {
+        "main": [
+          [
+            {
+              "node": "DB | Load AI Adapter Policy",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Load AI Adapter Policy": {
+        "main": [
+          [
+            {
+              "node": "CTX | Attach AI Policy",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Attach AI Policy": {
+        "main": [
+          [
+            {
+              "node": "VAL | Route AI Action",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Route AI Action": {
+        "main": [
+          [
+            {
+              "node": "VAL | Intent AI Enabled?",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "VAL | Summary AI Enabled?",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "REP | Unsupported AI Action",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Intent AI Enabled?": {
+        "main": [
+          [
+            {
+              "node": "AI | Parse Reporting Intent",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "REP | Intent AI Skipped",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI-PAR | Intent Schema": {
+        "ai_outputParser": [
+          [
+            {
+              "node": "AI | Parse Reporting Intent",
+              "type": "ai_outputParser",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI-MDL | Groq Intent Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI | Parse Reporting Intent",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI | Parse Reporting Intent": {
+        "main": [
+          [
+            {
+              "node": "CTX | Normalize AI Intent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Summary AI Enabled?": {
+        "main": [
+          [
+            {
+              "node": "AI | Generate Management Summary",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "REP | Summary AI Skipped",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI-PAR | Management Summary Schema": {
+        "ai_outputParser": [
+          [
+            {
+              "node": "AI | Generate Management Summary",
+              "type": "ai_outputParser",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI-MDL | Groq Summary Model": {
+        "ai_languageModel": [
+          [
+            {
+              "node": "AI | Generate Management Summary",
+              "type": "ai_languageModel",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI | Generate Management Summary": {
+        "main": [
+          [
+            {
+              "node": "CTX | Normalize Management Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "pinData": {},
+    "tags": []
+  }
+]

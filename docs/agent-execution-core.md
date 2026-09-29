@@ -4,15 +4,15 @@
 
 Locally deployable and verifiable on the isolated Agent v2 runtime.
 
-This milestone reuses the request/governance ideas from the earlier sanitized `REVINT-01` portfolio workflow, but it does **not** import that workflow as a production backup.
+This milestone reuses the request/governance ideas from the earlier sanitized `REVINT-01` portfolio workflow, but it does **not** import that 118-node workflow as a second production reporting engine. The useful AI intent, grounded summary, and presentation concepts are migrated through `REVINT-V2-AI-01` and the V2 presentation node while V2 remains the single authorization/execution core.
 
 ## What this layer adds
 
 The Agent execution core provides:
 
 - authenticated local report intake
-- a bounded natural-language fallback interpreter for the four existing governed KPIs
-- a structured-intent input contract for a future LLM adapter
+- a bounded deterministic natural-language fallback interpreter for the governed Revenue Question Pack
+- an optional internal Groq adapter that outputs the same structured-intent contract
 - safe clarification when metric, date period, or report shape is ambiguous
 - deterministic identity/permission authorization
 - scope-aware metric execution

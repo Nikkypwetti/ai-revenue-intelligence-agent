@@ -284,8 +284,13 @@ status, body = post({
     "question":"What is our open pipeline this month?"
 })
 value = body.get("report",{}).get("current_period",{}).get("value")
-if status != 200 or body.get("status") != "success" or float(value) != 1000.0:
-    raise SystemExit(f"FAIL: service-bound own-scope response was {status} {body}")
+presentation = body.get("presentation",{})
+if (
+    status != 200 or body.get("status") != "success" or float(value) != 1000.0 or
+    presentation.get("presentation_type") != "kpi_card" or
+    presentation.get("generated_from") != "governed_report_facts"
+):
+    raise SystemExit(f"FAIL: service-bound own-scope response/presentation was {status} {body}")
 
 bind_service("verify-agent-manager")
 status, body = post({
@@ -328,14 +333,17 @@ status, body = post({
 report = body.get("report",{})
 rows = report.get("current_period",{}).get("rows") or []
 row_map = {row.get("dimension_value"): float(row.get("value")) for row in rows}
+presentation = body.get("presentation",{})
 if (
     status != 200 or body.get("status") != "success" or
     report.get("report_type") != "breakdown" or
     report.get("dimensions") != ["sales_rep"] or
     row_map.get("Verify Agent Rep A") != 1000.0 or
-    row_map.get("Verify Agent Rep B") != 2000.0
+    row_map.get("Verify Agent Rep B") != 2000.0 or
+    presentation.get("presentation_type") != "table" or
+    presentation.get("generated_from") != "governed_report_facts"
 ):
-    raise SystemExit(f"FAIL: sales-rep pipeline breakdown was {status} {body}")
+    raise SystemExit(f"FAIL: sales-rep pipeline breakdown/presentation was {status} {body}")
 
 bind_service("verify-agent-rep-a")
 status, body = post({
