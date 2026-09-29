@@ -12,7 +12,8 @@ for fn in ("REVINT-V2-SALESFORCE-01.json","REVINT-V2-AIRTABLE-01.json"):
     p=root/"workflows/runtime-templates"/fn
     w=json.loads(p.read_text())[0]
     assert w["active"] is False, fn
-    assert len(w["nodes"]) == 10, (fn,len(w["nodes"]))
+    expected = 12 if fn=="REVINT-V2-SALESFORCE-01.json" else 10
+    assert len(w["nodes"]) == expected, (fn,len(w["nodes"]))
     assert all(str(n.get("notes","")).strip() for n in w["nodes"]), fn
 
 sf=json.loads((root/"workflows/runtime-templates/REVINT-V2-SALESFORCE-01.json").read_text())[0]
