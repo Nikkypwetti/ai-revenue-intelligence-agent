@@ -65,6 +65,20 @@ The current laptop deployment can complete substantial production hardening befo
 
 See [Local Production Hardening](docs/local-production-hardening.md).
 
+## Local Control Dashboard
+
+**REVINT-V2-CONTROL-01** adds a local-only, read-only Control Center for Agent V2 operations. It uses the existing Reporting RO credential to show governed KPI count, connector activation, runtime/component health, circuit state, recent failures, dead-letter backlog and active observability alerts. The route is GET-only, loopback-only, excluded from the public nginx ingress, and contains no mutation controls.
+
+Deploy explicitly with:
+
+```bash
+bash scripts/deploy-control-dashboard.sh --confirm REVINT_CONTROL_DASHBOARD
+```
+
+Then open `http://localhost:5681/webhook/revint/v2/control` (or the configured Agent V2 port).
+
+See [Control Dashboard documentation](docs/control-dashboard-v2.md).
+
 ## Power BI local handoff
 
 **Power BI local handoff** exports canonical deal facts plus bounded component/runtime status through the existing Reporting RO credential into checksum-protected, Git-ignored CSV packages. It is a business-wide trusted management extract and does not create a public database endpoint. See [Power BI Local Dataset Handoff](docs/powerbi-handoff-v2.md).
