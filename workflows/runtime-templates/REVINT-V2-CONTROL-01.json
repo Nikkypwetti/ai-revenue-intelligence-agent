@@ -1,0 +1,153 @@
+{
+  "id": "REVINTV2CONTROL01",
+  "name": "REVINT-V2-CONTROL-01 | Local Control Dashboard",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "revint/v2/control",
+        "authentication": "none",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "revint-v2-control-trigger-001",
+      "name": "INT | Local Control Dashboard",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "b1df4de7-6845-4ab5-a568-2f60b217b332",
+      "notes": "WORKFLOW\nREVINT-V2-CONTROL-01 | Local Control Dashboard\n\nNODE\nINT | Local Control Dashboard\n\nPURPOSE\nProvides the local browser entry point for the read-only Agent V2 operations dashboard.\n\nCONTROL BOUNDARY\nGET only. The Agent V2 n8n port is loopback-bound and the HTTPS ingress does not route this path. No public deployment is authorized by this workflow.\n\nDOCUMENTATION STATUS\nAgent V2 local control dashboard — 2026-09-30."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT jsonb_build_object(\n  'generated_at', now(),\n  'business', COALESCE((\n    SELECT jsonb_build_object(\n      'company_name', company_name,\n      'timezone', timezone,\n      'currency_code', currency_code,\n      'stale_deal_days', stale_deal_days,\n      'minimum_pipeline_coverage', minimum_pipeline_coverage\n    )\n    FROM governance.business_config\n    ORDER BY updated_at DESC\n    LIMIT 1\n  ), '{}'::jsonb),\n  'runtime', COALESCE((\n    SELECT jsonb_build_object(\n      'overall_status', overall_status,\n      'component_count', component_count,\n      'healthy_components', healthy_components,\n      'degraded_components', degraded_components,\n      'blocked_components', blocked_components,\n      'unknown_components', unknown_components,\n      'failures_1h', failures_1h,\n      'failures_24h', failures_24h,\n      'open_dead_letters', open_dead_letters,\n      'observed_at', observed_at\n    )\n    FROM observability.runtime_status\n  ), '{}'::jsonb),\n  'active_kpi_count', (\n    SELECT count(*)\n    FROM governance.kpi_catalog\n    WHERE active\n  ),\n  'connectors', COALESCE((\n    SELECT jsonb_agg(\n      jsonb_build_object(\n        'connector_key', connector_key,\n        'connector_type', connector_type,\n        'display_name', display_name,\n        'active', active,\n        'updated_at', updated_at\n      )\n      ORDER BY connector_key\n    )\n    FROM governance.connector_registry\n  ), '[]'::jsonb),\n  'components', COALESCE((\n    SELECT jsonb_agg(\n      jsonb_build_object(\n        'component_key', component_key,\n        'workflow_id', workflow_id,\n        'display_name', display_name,\n        'operational_status', operational_status,\n        'circuit_state', circuit_state,\n        'consecutive_failures', consecutive_failures,\n        'failures_1h', failures_1h,\n        'failures_24h', failures_24h,\n        'open_dead_letters', open_dead_letters,\n        'last_success_at', last_success_at,\n        'last_failure_at', last_failure_at\n      )\n      ORDER BY component_key\n    )\n    FROM observability.component_status\n  ), '[]'::jsonb),\n  'alerts', COALESCE((\n    SELECT jsonb_agg(\n      jsonb_build_object(\n        'component_key', component_key,\n        'severity', severity,\n        'alert_type', alert_type,\n        'summary', summary,\n        'first_observed_at', first_observed_at\n      )\n      ORDER BY first_observed_at DESC NULLS LAST\n    )\n    FROM (\n      SELECT component_key, severity, alert_type, summary, first_observed_at\n      FROM observability.alert_ready\n      ORDER BY first_observed_at DESC NULLS LAST\n      LIMIT 10\n    ) a\n  ), '[]'::jsonb)\n) AS control_snapshot;",
+        "options": {}
+      },
+      "id": "revint-v2-control-query-001",
+      "name": "DB | Load Governed Control Snapshot",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.7,
+      "position": [
+        280,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "postgres": {
+          "id": "REVINTPGREPORTRO001",
+          "name": "REVINT | Reporting RO"
+        }
+      },
+      "notes": "WORKFLOW\nREVINT-V2-CONTROL-01 | Local Control Dashboard\n\nNODE\nDB | Load Governed Control Snapshot\n\nPURPOSE\nLoads bounded business configuration, KPI count, connector registry, observability component state, runtime state and alert-ready rows.\n\nCONTROL BOUNDARY\nUses Reporting RO only. It cannot modify reporting facts, governance configuration, audit data, credentials or workflow state.\n\nDOCUMENTATION STATUS\nAgent V2 local control dashboard — 2026-09-30."
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw=$json.control_snapshot;\nconst s=typeof raw==='string'?JSON.parse(raw):raw||{};\nconst esc=(v)=>String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\nconst statusClass=(v)=>['healthy','degraded','blocked','unknown'].includes(String(v))?String(v):'unknown';\nconst fmtDate=(v)=>{ if(!v) return '—'; const d=new Date(v); return Number.isNaN(d.getTime())?'—':d.toLocaleString('en-GB',{dateStyle:'medium',timeStyle:'short'}); };\nconst runtime=s.runtime||{};\nconst business=s.business||{};\nconst connectors=Array.isArray(s.connectors)?s.connectors:[];\nconst components=Array.isArray(s.components)?s.components:[];\nconst alerts=Array.isArray(s.alerts)?s.alerts:[];\nconst connectorCards=connectors.map(c=>`<article class=\"card\"><div class=\"row\"><div><div class=\"eyebrow\">${esc(c.connector_type||'connector')}</div><h3>${esc(c.display_name||c.connector_key)}</h3></div><span class=\"badge ${c.active?'healthy':'unknown'}\">${c.active?'active':'safe-disabled'}</span></div><p class=\"muted\">${esc(c.connector_key)}</p><p class=\"tiny\">Updated ${esc(fmtDate(c.updated_at))}</p></article>`).join('');\nconst componentRows=components.map(c=>`<tr><td><strong>${esc(c.display_name||c.component_key)}</strong><div class=\"tiny\">${esc(c.component_key)}</div></td><td><span class=\"badge ${statusClass(c.operational_status)}\">${esc(c.operational_status)}</span></td><td>${esc(c.circuit_state||'—')}</td><td>${esc(c.failures_1h??0)}</td><td>${esc(c.open_dead_letters??0)}</td><td>${esc(fmtDate(c.last_success_at))}</td></tr>`).join('');\nconst alertHtml=alerts.length?alerts.map(a=>`<div class=\"alert\"><div class=\"row\"><strong>${esc(a.summary)}</strong><span class=\"badge ${a.severity==='critical'?'blocked':'degraded'}\">${esc(a.severity)}</span></div><div class=\"tiny\">${esc(a.component_key)} · ${esc(a.alert_type)} · ${esc(fmtDate(a.first_observed_at))}</div></div>`).join(''):'<div class=\"empty\">No active observability alerts.</div>';\nconst html=`<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Revenue Intelligence Control Center</title><style>\n:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif}\n*{box-sizing:border-box}body{margin:0;background:#0b0d10;color:#f5f7fa}.shell{max-width:1280px;margin:auto;padding:28px 20px 56px}.top{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;flex-wrap:wrap}.eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:#8d98a8;font-weight:700}h1{font-size:clamp(30px,5vw,52px);margin:6px 0 8px;line-height:1.02}h2{font-size:20px;margin:0 0 14px}h3{font-size:16px;margin:4px 0}.muted,.tiny{color:#97a2b2}.muted{margin:0;line-height:1.6}.tiny{font-size:12px;margin-top:8px}.actions{display:flex;gap:10px;flex-wrap:wrap}.btn{display:inline-flex;text-decoration:none;color:#fff;border:1px solid #2a3038;border-radius:12px;padding:10px 14px;background:#15191f;font-weight:700;font-size:13px}.btn:hover{border-color:#5b6675}.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:24px}.metric,.card,.panel{background:#11151a;border:1px solid #252b33;border-radius:18px}.metric{padding:18px}.metric .value{font-size:30px;font-weight:800;margin-top:5px}.section{margin-top:28px}.connector-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.card{padding:18px}.row{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.badge{display:inline-flex;align-items:center;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;border:1px solid transparent}.healthy{background:#123922;color:#8ff0ad;border-color:#245f39}.degraded{background:#4a3710;color:#ffd77a;border-color:#72561c}.blocked{background:#4a171a;color:#ff9c9f;border-color:#7a282d}.unknown{background:#252a31;color:#c3cad4;border-color:#3b424c}.panel{overflow:hidden}.panel-head{padding:18px;border-bottom:1px solid #252b33;display:flex;justify-content:space-between;gap:16px;align-items:center}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:850px}th,td{text-align:left;padding:14px 16px;border-bottom:1px solid #1f252c;font-size:13px}th{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#8d98a8}.alert{padding:14px 16px;border-bottom:1px solid #1f252c}.empty{padding:20px;color:#97a2b2}.notice{margin-top:28px;padding:16px 18px;border:1px solid #2e3540;border-radius:14px;background:#10141a}.notice strong{display:block;margin-bottom:5px}@media(max-width:900px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}.connector-grid{grid-template-columns:1fr}}@media(max-width:560px){.grid{grid-template-columns:1fr}}\n</style></head><body><main class=\"shell\"><div class=\"top\"><div><div class=\"eyebrow\">Agent V2 · Local Operations</div><h1>Revenue Intelligence Control Center</h1><p class=\"muted\">${esc(business.company_name||'Revenue Intelligence Agent')} · ${esc(business.currency_code||'—')} · ${esc(business.timezone||'—')}</p></div><div class=\"actions\"><a class=\"btn\" href=\"./control\">Refresh</a><a class=\"btn\" href=\"/\">Open n8n</a></div></div>\n<section class=\"grid\"><div class=\"metric\"><div class=\"eyebrow\">Overall status</div><div class=\"value\"><span class=\"badge ${statusClass(runtime.overall_status)}\">${esc(runtime.overall_status||'unknown')}</span></div></div><div class=\"metric\"><div class=\"eyebrow\">Governed KPIs</div><div class=\"value\">${esc(s.active_kpi_count??0)}</div></div><div class=\"metric\"><div class=\"eyebrow\">Managed components</div><div class=\"value\">${esc(runtime.component_count??0)}</div></div><div class=\"metric\"><div class=\"eyebrow\">Open dead letters</div><div class=\"value\">${esc(runtime.open_dead_letters??0)}</div></div></section>\n<section class=\"section\"><h2>CRM & Source Connectors</h2><div class=\"connector-grid\">${connectorCards||'<div class=\"empty\">No connector registry rows found.</div>'}</div></section>\n<section class=\"section panel\"><div class=\"panel-head\"><div><h2>Reliability & Observability</h2><div class=\"tiny\">Observed ${esc(fmtDate(runtime.observed_at))}</div></div><div class=\"tiny\">Failures 1h: ${esc(runtime.failures_1h??0)} · 24h: ${esc(runtime.failures_24h??0)}</div></div><div class=\"table-wrap\"><table><thead><tr><th>Component</th><th>Status</th><th>Circuit</th><th>Failures 1h</th><th>Dead letters</th><th>Last success</th></tr></thead><tbody>${componentRows||'<tr><td colspan=\"6\">No component status rows found.</td></tr>'}</tbody></table></div></section>\n<section class=\"section panel\"><div class=\"panel-head\"><h2>Active Alerts</h2><span class=\"badge ${alerts.length?'degraded':'healthy'}\">${alerts.length} alert${alerts.length===1?'':'s'}</span></div>${alertHtml}</section>\n<div class=\"notice\"><strong>Read-only control surface</strong><div class=\"muted\">This dashboard uses the existing Reporting RO credential and exposes no workflow mutation, credential, SQL, activation, or connector-write action. It is intended for the local loopback deployment only; the public ingress does not route this path.</div></div><div class=\"tiny\">Snapshot generated ${esc(fmtDate(s.generated_at))}</div></main></body></html>`;\nreturn {html};"
+      },
+      "id": "revint-v2-control-build-001",
+      "name": "REP | Build Control Center",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-CONTROL-01 | Local Control Dashboard\n\nNODE\nREP | Build Control Center\n\nPURPOSE\nRenders a recruiter- and operator-readable control center from the governed snapshot.\n\nCONTROL BOUNDARY\nAll database values are HTML-escaped. The page contains no mutation controls and does not expose credentials, raw audit payloads or arbitrary SQL.\n\nDOCUMENTATION STATUS\nAgent V2 local control dashboard — 2026-09-30."
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "Content-Security-Policy",
+                "value": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+              },
+              {
+                "name": "Permissions-Policy",
+                "value": "camera=(), microphone=(), geolocation=()"
+              },
+              {
+                "name": "X-Content-Type-Options",
+                "value": "nosniff"
+              },
+              {
+                "name": "Referrer-Policy",
+                "value": "no-referrer"
+              }
+            ]
+          }
+        }
+      },
+      "id": "revint-v2-control-return-001",
+      "name": "DEL | Return Control Center",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        840,
+        0
+      ],
+      "notes": "WORKFLOW\nREVINT-V2-CONTROL-01 | Local Control Dashboard\n\nNODE\nDEL | Return Control Center\n\nPURPOSE\nReturns the control center with no-store and restrictive browser security headers.\n\nCONTROL BOUNDARY\nNo external scripts, images, forms or browser capabilities are enabled.\n\nDOCUMENTATION STATUS\nAgent V2 local control dashboard — 2026-09-30."
+    }
+  ],
+  "connections": {
+    "INT | Local Control Dashboard": {
+      "main": [
+        [
+          {
+            "node": "DB | Load Governed Control Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DB | Load Governed Control Snapshot": {
+      "main": [
+        [
+          {
+            "node": "REP | Build Control Center",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "REP | Build Control Center": {
+      "main": [
+        [
+          {
+            "node": "DEL | Return Control Center",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Lagos",
+    "errorWorkflow": "REVINTV2SYSERROR01",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": {}
+}
