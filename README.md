@@ -65,6 +65,10 @@ The current laptop deployment can complete substantial production hardening befo
 
 See [Local Production Hardening](docs/local-production-hardening.md).
 
+## Power BI local handoff
+
+**Power BI local handoff** exports canonical deal facts plus bounded component/runtime status through the existing Reporting RO credential into checksum-protected, Git-ignored CSV packages. It is a business-wide trusted management extract and does not create a public database endpoint. See [Power BI Local Dataset Handoff](docs/powerbi-handoff-v2.md).
+
 ## Revenue Question Pack
 
 - [37 governed KPIs and reusable data-domain model](docs/revenue-question-pack-v2.md)

@@ -48,6 +48,9 @@ jobs:
       - name: Incident notification contract
         run: bash scripts/verify-incident-notifications-static.sh
 
+      - name: Power BI handoff contract
+        run: bash scripts/verify-powerbi-handoff-static.sh
+
       - name: Secret-like committed file names
         run: |
           if git ls-files | grep -Ei '(^|/)(\.env$|.*\.pem$|.*\.key$|.*credentials.*\.json$)'; then
