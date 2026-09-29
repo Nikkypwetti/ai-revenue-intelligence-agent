@@ -35,7 +35,7 @@ connectors = doc.get("connectors")
 if not isinstance(connectors, list) or not connectors:
     raise SystemExit("FAIL: connector config must contain at least one connector.")
 
-allowed_types = {"hubspot","salesforce","postgresql","google_sheets","billing","rest_api"}
+allowed_types = {"hubspot","salesforce","airtable","postgresql","google_sheets","billing","rest_api"}
 allowed_fields = {
     "deal_name","amount","currency_code","stage_name","stage_category",
     "sales_rep","lead_source","created_at","expected_close_date",
@@ -96,6 +96,8 @@ for c in connectors:
             raise SystemExit(f"FAIL: source_field or default_value is required for {key}.{field}.")
         if "required" in m and not isinstance(m["required"], bool):
             raise SystemExit(f"FAIL: required must be true/false for {key}.{field}.")
+        if c.get("active") is True and isinstance(source_field, str) and source_field.startswith("CHANGE_ME_"):
+            raise SystemExit(f"FAIL: active connector {key} contains unresolved source-field placeholder for {field}.")
 
     required_contract = {"amount","currency_code","stage_name","stage_category"}
     missing = sorted(required_contract - seen_fields)
