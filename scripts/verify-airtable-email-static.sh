@@ -62,7 +62,9 @@ done
 grep -q '^AIRTABLE_SYNC_ENABLED=false$' "$ENV"
 grep -q '^EMAIL_REPORT_ENABLED=false$' "$ENV"
 grep -q 'REVINTAIRTABLE001' "$ROOT_DIR/scripts/deploy-airtable-connector.sh"
-grep -q 'REVINTGMAILREPORT001' "$ROOT_DIR/scripts/deploy-email-delivery.sh"
+grep -q "name='REVINT | Gmail Reports'" "$ROOT_DIR/scripts/deploy-email-delivery.sh"
+grep -q 'gmail_credential_id' "$ROOT_DIR/scripts/deploy-email-delivery.sh"
+grep -q 'tmp_workflow' "$ROOT_DIR/scripts/deploy-email-delivery.sh"
 grep -q 'CHANGE_ME_' "$ROOT_DIR/config/first-client.connectors.example.json"
 
 if bash "$ROOT_DIR/scripts/deploy-airtable-connector.sh" --confirm WRONG >/tmp/revint-air-guard.out 2>&1; then
