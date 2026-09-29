@@ -1,0 +1,117 @@
+{
+  "id": "REVINTV2FORM01",
+  "name": "REVINT-V2-FORM-01 | Manager SSO Form",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "revint/v2/form-sso",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "revint-v2-form-trigger-001",
+      "name": "INT | SSO Manager Form",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REVINTSSOINTERNAL001",
+          "name": "REVINT | SSO Internal Header Auth"
+        }
+      },
+      "webhookId": "b0f5f179-48a2-41b5-a4d6-f7deea8d71ef",
+      "notes": "SSO-gated browser entry. The form cannot choose principal, tenant, role, SQL, or delivery destination."
+    },
+    {
+      "parameters": {
+        "jsCode": "return { html: \"<!doctype html>\\n<html lang=\\\"en\\\"><head><meta charset=\\\"utf-8\\\">\\n<meta name=\\\"viewport\\\" content=\\\"width=device-width,initial-scale=1\\\">\\n<title>Revenue Intelligence Report</title>\\n<style>\\nbody{font-family:system-ui,sans-serif;margin:0;padding:32px 16px;background:#f6f6f6;color:#161616}\\nmain{max-width:760px;margin:auto;background:#fff;border:1px solid #ddd;border-radius:12px;padding:28px}\\ntextarea{width:100%;min-height:128px;box-sizing:border-box;padding:12px;font:inherit}\\nbutton{margin-top:12px;padding:10px 16px;background:#111;color:#fff;border:0;border-radius:8px}\\n#result{margin-top:24px;padding-top:20px;border-top:1px solid #ddd}.hidden{display:none}.error{color:#9d1c1c}\\npre{white-space:pre-wrap;word-break:break-word;background:#f4f4f4;padding:12px;border-radius:8px}\\n</style></head><body><main>\\n<h1>Revenue Intelligence Report</h1>\\n<p>Ask a governed Revenue/RevOps question. Your identity and data scope come from company SSO.</p>\\n<form id=\\\"f\\\"><label for=\\\"q\\\">Report question</label>\\n<textarea id=\\\"q\\\" maxlength=\\\"1000\\\" required placeholder=\\\"What is open pipeline this quarter by sales rep?\\\"></textarea>\\n<button id=\\\"b\\\" type=\\\"submit\\\">Run report</button></form>\\n<div id=\\\"status\\\" role=\\\"status\\\" aria-live=\\\"polite\\\"></div><section id=\\\"result\\\" class=\\\"hidden\\\"></section>\\n<script>\\n(()=>{'use strict';const f=document.getElementById('f'),q=document.getElementById('q'),b=document.getElementById('b'),s=document.getElementById('status'),r=document.getElementById('result');\\nconst clear=e=>{while(e.firstChild)e.removeChild(e.firstChild)};\\nconst add=(tag,text,cls)=>{const e=document.createElement(tag);e.textContent=text==null?'':String(text);if(cls)e.className=cls;r.appendChild(e);return e};\\nf.addEventListener('submit',async e=>{e.preventDefault();clear(r);r.classList.add('hidden');s.textContent='Running governed report\\u2026';b.disabled=true;\\ntry{const resp=await fetch('/sso/report',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({question:q.value.trim(),delivery_channel:'api'})});\\nconst body=await resp.json().catch(()=>({}));clear(r);r.classList.remove('hidden');\\nif(!resp.ok||body.status!=='success'){add('h2','Report unavailable','error');add('p',body?.error?.message||'The report request could not be completed safely.','error');if(body.request_id)add('p','Reference: '+body.request_id);s.textContent='';return}\\nconst p=body.presentation||{},rep=body.report||{},sum=body.management_summary||{};\\nadd('h2',p.title||sum.headline||rep.kpi_key||'Revenue report');if(p.summary||sum.summary)add('p',p.summary||sum.summary);\\nconst facts=p.key_facts||sum.key_facts||[];if(facts.length){add('h3','Key facts');facts.slice(0,10).forEach(x=>add('div',x))}\\nif(sum.management_interpretation){add('h3','Management interpretation');add('p',sum.management_interpretation)}\\nif(sum.recommended_action){add('h3','Recommended action');add('p',sum.recommended_action)}\\nadd('h3','Governed data');add('pre',JSON.stringify(p.data||{current_period:rep.current_period||null,previous_period:rep.previous_period||null,diagnostics:rep.diagnostics||null},null,2));\\nif(body.request_id)add('p','Reference: '+body.request_id);s.textContent='Report completed.'\\n}catch(_){clear(r);r.classList.remove('hidden');add('h2','Report unavailable','error');add('p','The reporting service could not be reached. Please try again later.','error');s.textContent=''}finally{b.disabled=false}})})();\\n</script></main></body></html>\" };"
+      },
+      "id": "revint-v2-form-build-001",
+      "name": "REP | Build Manager Form Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        0
+      ],
+      "notes": "Builds a static same-origin form. Report and model values are rendered with DOM textContent; no user identity is collected."
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.html }}",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              },
+              {
+                "name": "Cache-Control",
+                "value": "no-store"
+              },
+              {
+                "name": "Content-Security-Policy",
+                "value": "default-src 'none'; connect-src 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+              },
+              {
+                "name": "Permissions-Policy",
+                "value": "camera=(), microphone=(), geolocation=()"
+              }
+            ]
+          }
+        }
+      },
+      "id": "revint-v2-form-return-001",
+      "name": "DEL | Return Manager Form",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        560,
+        0
+      ],
+      "notes": "Returns only the static form page with no-store and restrictive browser security headers."
+    }
+  ],
+  "connections": {
+    "INT | SSO Manager Form": {
+      "main": [
+        [
+          {
+            "node": "REP | Build Manager Form Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "REP | Build Manager Form Page": {
+      "main": [
+        [
+          {
+            "node": "DEL | Return Manager Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Lagos",
+    "errorWorkflow": "REVINTV2SYSERROR01"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {}
+}

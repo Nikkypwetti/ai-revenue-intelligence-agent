@@ -93,6 +93,30 @@ server {
         proxy_pass $oauth2_proxy_upstream/oauth2/auth;
     }
 
+    location = /sso/form {
+        client_max_body_size 16k;
+        limit_req zone=revint_sso burst=${SSO_RATE_BURST} nodelay;
+        limit_conn revint_per_ip ${MAX_CONN_PER_IP};
+
+        if ($sso_enabled != true) { return 404; }
+        if ($request_method != GET) { return 405; }
+
+        auth_request /_sso_auth;
+        error_page 401 =302 /oauth2/start?rd=$scheme://$host$request_uri;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Revint-Sso-Internal-Key "${SSO_INTERNAL_API_KEY}";
+        proxy_set_header Authorization "";
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_pass http://n8n:5678/webhook/revint/v2/form-sso;
+    }
+
     location = /sso/report {
         client_max_body_size ${REPORT_MAX_BODY_SIZE};
         limit_req zone=revint_sso burst=${SSO_RATE_BURST} nodelay;

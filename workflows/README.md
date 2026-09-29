@@ -40,6 +40,12 @@ The Agent Core calls it with fail-soft behavior: intent falls back to determinis
 
 Internal-only external-delivery adapter. It receives an already-governed Agent V2 report artifact, re-authorizes delivery by tenant and role, resolves the trusted Slack destination from governance, sends through a dedicated encrypted Agent V2 Slack credential, and returns bounded delivery status. Slack delivery is safe-disabled by default.
 
+### REVINT-V2-FORM-01 — Manager SSO Form
+
+runtime-templates/REVINT-V2-FORM-01.json
+
+A thin SSO-gated browser adapter that submits the manager question to /sso/report. It contains no KPI logic, SQL, caller-selectable principal, or independent authorization model.
+
 ### REVINT-V2-SCHEDULED-01 — Pipeline Intelligence
 
 `runtime-templates/REVINT-V2-SCHEDULED-01.json`
