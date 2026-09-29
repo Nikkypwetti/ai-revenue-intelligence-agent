@@ -51,6 +51,9 @@ jobs:
       - name: Power BI handoff contract
         run: bash scripts/verify-powerbi-handoff-static.sh
 
+      - name: Control dashboard contract
+        run: bash scripts/verify-control-dashboard-static.sh
+
       - name: Airtable and email adapter contracts
         run: bash scripts/verify-airtable-email-static.sh
 
