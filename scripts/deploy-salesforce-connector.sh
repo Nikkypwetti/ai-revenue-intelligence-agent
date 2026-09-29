@@ -49,23 +49,43 @@ overlap="${SALESFORCE_SYNC_OVERLAP_SECONDS:-300}"
 
 compose=(docker compose -p "${COMPOSE_PROJECT_NAME:-revint-agent}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 tmp_config="$(mktemp)"
+tmp_workflow="$(mktemp)"
 n8n_stopped=false
 
 cleanup(){
-  rm -f "$tmp_config"
+  rm -f "$tmp_config" "$tmp_workflow"
   if [[ "$n8n_stopped" == "true" ]]; then
     "${compose[@]}" up -d n8n >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT
 
-credential_state="$("${compose[@]}" exec -T n8n-db psql -X -q -A -t   -U "$N8N_DB_USER" -d "$N8N_DB_NAME" -c "
-    SELECT count(*) || '|' || count(*) FILTER (WHERE data NOT LIKE '{%')
+credential_row="$("${compose[@]}" exec -T n8n-db psql -X -q -A -t -F '|' \
+  -U "$N8N_DB_USER" -d "$N8N_DB_NAME" -c "
+    SELECT id, count(*) OVER (), (data NOT LIKE '{%')::int
     FROM credentials_entity
-    WHERE id='REVINTSALESFORCERO001'
+    WHERE name='REVINT | Salesforce Opportunities RO'
       AND type='salesforceOAuth2Api';
   ")"
-[[ "$credential_state" == "1|1" ]] || fail "dedicated encrypted Salesforce credential REVINTSALESFORCERO001 is missing."
+[[ -n "$credential_row" ]] || fail "dedicated Salesforce credential named REVINT | Salesforce Opportunities RO is missing."
+IFS='|' read -r salesforce_credential_id salesforce_credential_count salesforce_encrypted <<< "$credential_row"
+[[ "$salesforce_credential_count" == "1" && "$salesforce_encrypted" == "1" ]] || fail "Salesforce credential must exist exactly once and be stored encrypted."
+
+python3 - "$WORKFLOW" "$tmp_workflow" "$salesforce_credential_id" <<'PY'
+import json,sys
+src,dst,credential_id=sys.argv[1:4]
+doc=json.load(open(src))
+found=False
+for workflow in doc:
+    for node in workflow.get("nodes",[]):
+        if node.get("name")=="SRC | Fetch Salesforce Opportunities":
+            node["credentials"]["salesforceOAuth2Api"]["id"]=credential_id
+            node["credentials"]["salesforceOAuth2Api"]["name"]="REVINT | Salesforce Opportunities RO"
+            found=True
+if not found:
+    raise SystemExit("FAIL: Salesforce source node not found.")
+json.dump(doc,open(dst,"w"),indent=2)
+PY
 
 set_connector_state(){
   local state="$1"
@@ -95,7 +115,7 @@ set_connector_state false
 n8n_stopped=true
 
 import_publish "$SYS_WORKFLOW" "REVINTV2SYSERROR01"
-import_publish "$WORKFLOW" "REVINTV2SALESFORCE01"
+import_publish "$tmp_workflow" "REVINTV2SALESFORCE01"
 
 "${compose[@]}" up -d n8n >/dev/null
 n8n_stopped=false
