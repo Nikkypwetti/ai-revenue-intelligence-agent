@@ -34,6 +34,12 @@ Internal-only optional Groq adapter that ports structured intent parsing and gro
 
 The Agent Core calls it with fail-soft behavior: intent falls back to deterministic interpretation and summary generation is omitted when the provider is unavailable.
 
+### REVINT-V2-DELIVERY-01 — Governed Report Delivery
+
+`runtime-templates/REVINT-V2-DELIVERY-01.json`
+
+Internal-only external-delivery adapter. It receives an already-governed Agent V2 report artifact, re-authorizes delivery by tenant and role, resolves the trusted Slack destination from governance, sends through a dedicated encrypted Agent V2 Slack credential, and returns bounded delivery status. Slack delivery is safe-disabled by default.
+
 ### REVINT-V2-SCHEDULED-01 — Pipeline Intelligence
 
 `runtime-templates/REVINT-V2-SCHEDULED-01.json`
