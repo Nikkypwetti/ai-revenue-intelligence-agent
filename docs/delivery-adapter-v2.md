@@ -102,4 +102,4 @@ bash scripts/verify-delivery-adapter.sh
 
 The verifier checks the Slack governance boundary and the Agent Core provider routing, including the email route.
 
-The Gmail adapter also has its own static/runtime validation path. A controlled local delivery test on 2026-09-29 confirmed authorization, trusted-recipient resolution, Gmail send, reliable audit logging, and bounded delivery-result return.
+The Gmail adapter also has its own static/runtime validation path. On 2026-09-29, a real Agent Core request using `delivery_channel=email` completed end to end: governed open pipeline was calculated as `1200 USD`, a KPI-card presentation was built, Gmail returned a provider message ID, matching `report_completed` and `email_report_delivered` audit records shared the same request/correlation IDs, and both `agent_reporting` and `email_delivery` circuits finished closed with zero consecutive failures.
