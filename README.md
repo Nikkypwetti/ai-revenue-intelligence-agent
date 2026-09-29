@@ -69,6 +69,12 @@ See [Local Production Hardening](docs/local-production-hardening.md).
 
 **Power BI local handoff** exports canonical deal facts plus bounded component/runtime status through the existing Reporting RO credential into checksum-protected, Git-ignored CSV packages. It is a business-wide trusted management extract and does not create a public database endpoint. See [Power BI Local Dataset Handoff](docs/powerbi-handoff-v2.md).
 
+## Airtable + email delivery adapters
+
+**Airtable connector** adds a disabled-by-default, read-only Opportunity sync using n8n Airtable v2 search, dedicated PAT credential `REVINTAIRTABLE001`, generic multi-CRM cursor/reliability governance, and canonical ingestion. Activation is blocked until the real client field/stage mappings replace every placeholder. See [Airtable Connector](docs/airtable-connector.md).
+
+**Gmail report delivery** adds an internal-only governed email adapter using dedicated OAuth credential `REVINTGMAILREPORT001`. The recipient is resolved from server-side governance and cannot be supplied by AI or the caller. See [Email Delivery](docs/email-delivery.md).
+
 ## Revenue Question Pack
 
 - [37 governed KPIs and reusable data-domain model](docs/revenue-question-pack-v2.md)

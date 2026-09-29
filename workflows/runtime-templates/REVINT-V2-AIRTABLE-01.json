@@ -1,0 +1,349 @@
+[
+  {
+    "id": "REVINTV2AIRTABLE01",
+    "name": "REVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 15
+              }
+            ]
+          }
+        },
+        "id": "air01schedule",
+        "name": "INT | Fifteen-Minute Airtable Sync",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nINT | Fifteen-Minute Airtable Sync\n\nPURPOSE\nStarts bounded Airtable Opportunity polling every 15 minutes.\n\nCONTROL BOUNDARY\nTrigger only; grants no source/database authority.\n\nDOCUMENTATION STATUS\nFirst-client Airtable adapter — 2026-09-29."
+      },
+      {
+        "parameters": {},
+        "id": "air02manual",
+        "name": "INT | Manual Airtable Sync",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nINT | Manual Airtable Sync\n\nPURPOSE\nProvides a controlled UAT/probe entry point.\n\nCONTROL BOUNDARY\nManual trigger only; downstream governance stays authoritative.\n\nDOCUMENTATION STATUS\nFirst-client Airtable adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.get_connector_sync_context('airtable_primary') AS sync_context;",
+          "options": {}
+        },
+        "id": "air03context",
+        "name": "DB | Load Airtable Sync Context",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          260,
+          10
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nDB | Load Airtable Sync Context\n\nPURPOSE\nLoads connector activation, cursor, currency and reliability state through the generic CRM sync boundary.\n\nCONTROL BOUNDARY\nReporting RO cannot modify governance.\n\nDOCUMENTATION STATUS\nFirst-client Airtable adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const raw=$json.sync_context;\nconst ctx=typeof raw==='string'?JSON.parse(raw):raw;\nif(!ctx || ctx.connector_key!=='airtable_primary' || ctx.connector_type!=='airtable') throw new Error('AIRTABLE_SYNC_CONTEXT_INVALID');\nlet gate=ctx.reliability_gate;\nif(typeof gate==='string') gate=JSON.parse(gate);\nconst field=String($env.AIRTABLE_LAST_MODIFIED_FIELD??'').trim();\nif(!/^[A-Za-z0-9 _-]{1,100}$/.test(field) || field.startsWith('CHANGE_ME')) throw new Error('AIRTABLE_LAST_MODIFIED_FIELD_INVALID');\nconst start=new Date(ctx.query_start_at).toISOString();\nconst end=new Date(ctx.query_end_at).toISOString();\nconst esc=s=>String(s).replace(/'/g,\"\\\\'\");\nconst formula=\"AND(IS_AFTER({\"+field+\"}, '\"+esc(start)+\"'), IS_BEFORE({\"+field+\"}, '\"+esc(end)+\"'))\";\nreturn {sync_context:ctx,should_sync:gate?.allowed===true,skip_reason:gate?.allowed===true?null:'RELIABILITY_CIRCUIT_OPEN',airtable_filter_formula:formula,last_modified_field:field};"
+        },
+        "id": "air04query",
+        "name": "CTX | Build Airtable Search",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          10
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nCTX | Build Airtable Search\n\nPURPOSE\nBuilds the bounded Airtable formula from server-side sync context and the approved last-modified field.\n\nCONTROL BOUNDARY\nCaller/AI cannot choose the base, table, field, or time window.\n\nDOCUMENTATION STATUS\nFirst-client Airtable adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "air-allowed",
+                "leftValue": "={{ $json.should_sync }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "air05if",
+        "name": "VAL | Airtable Sync Allowed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          780,
+          10
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nVAL | Airtable Sync Allowed?\n\nPURPOSE\nStops Airtable polling when the reliability circuit is blocked.\n\nCONTROL BOUNDARY\nFail-closed deterministic gate.\n\nDOCUMENTATION STATUS\nFirst-client Airtable adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "authentication": "airtableTokenApi",
+          "resource": "record",
+          "operation": "search",
+          "base": {
+            "__rl": true,
+            "value": "={{ $env.AIRTABLE_BASE_ID }}",
+            "mode": "id"
+          },
+          "table": {
+            "__rl": true,
+            "value": "={{ $env.AIRTABLE_TABLE_ID }}",
+            "mode": "id"
+          },
+          "filterByFormula": "={{ $json.airtable_filter_formula }}",
+          "returnAll": true,
+          "options": {},
+          "sort": {
+            "property": [
+              {
+                "field": "={{ $json.last_modified_field }}",
+                "direction": "asc"
+              }
+            ]
+          }
+        },
+        "id": "air06source",
+        "name": "SRC | Fetch Airtable Opportunities",
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.2,
+        "position": [
+          1040,
+          -100
+        ],
+        "alwaysOutputData": true,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "REVINTAIRTABLE001",
+            "name": "REVINT | Airtable Opportunities RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nSRC | Fetch Airtable Opportunities\n\nPURPOSE\nReads bounded Opportunity records through the dedicated Agent V2 Airtable PAT credential.\n\nCONTROL BOUNDARY\nSearch/read operation only; no create/update/delete node exists.\n\nDOCUMENTATION STATUS\nFirst-client Airtable adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const contextRaw=$('DB | Load Airtable Sync Context').first().json.sync_context;\nconst ctx=typeof contextRaw==='string'?JSON.parse(contextRaw):contextRaw;\nconst meta=$('CTX | Build Airtable Search').first().json;\nconst field=meta.last_modified_field;\nconst source=$input.all().map(x=>x.json??{}).filter(x=>String(x.id??'').trim()!=='');\nif(source.length>2000) throw new Error('AIRTABLE_SYNC_RESULT_LIMIT_EXCEEDED');\nconst parse=v=>{if(v===null||v===undefined||v==='')return null;const d=new Date(String(v));return Number.isNaN(d.getTime())?null:d.toISOString();};\nconst queryStart=new Date(ctx.query_start_at).getTime();\nconst queryEnd=new Date(ctx.query_end_at).getTime();\nconst records=[];\nlet earliest=null;\nfor(const r of source){\n  const id=String(r.id??'').trim();\n  const updated=parse(r[field]);\n  if(!id || id.length>200 || !updated) throw new Error('AIRTABLE_SOURCE_RECORD_INVALID');\n  const ms=new Date(updated).getTime();\n  if(earliest===null||ms<earliest) earliest=ms;\n  const payload={...r};\n  delete payload.id;\n  records.push({source_record_id:id,source_payload:payload});\n}\nconst watermark=records.length?new Date(Math.min(queryEnd,Math.max(queryStart,...source.map(r=>new Date(parse(r[field])).getTime())))).toISOString():new Date(queryEnd).toISOString();\nreturn [{json:{connector_key:'airtable_primary',query_start_at:new Date(queryStart).toISOString(),query_end_at:new Date(queryEnd).toISOString(),watermark,source_count:records.length,record_count:records.length,rejected_count:0,records,event_id:'AIRTABLE-SYNC-'+String(queryEnd)}}];"
+        },
+        "id": "air07normalize",
+        "name": "VAL | Normalize Airtable Opportunities",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nVAL | Normalize Airtable Opportunities\n\nPURPOSE\nWraps raw Airtable records into the canonical source envelope while validating record IDs and the configured last-modified field.\n\nCONTROL BOUNDARY\nCanonical amount/stage/currency validation remains in the governed connector mapping/ingestion gateway. Any invalid batch fails without cursor advancement.\n\nDOCUMENTATION STATUS\nFirst-client Airtable adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT ingestion.ingest_deal_batch_from_source($1,$2::jsonb) AS batch_result;",
+          "options": {
+            "queryReplacement": "={{ [ $json.connector_key, JSON.stringify($json.records) ] }}"
+          }
+        },
+        "id": "air08batch",
+        "name": "DB | Ingest Airtable Batch",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1560,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGINGESTWR001",
+            "name": "REVINT | Connector Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nDB | Ingest Airtable Batch\n\nPURPOSE\nWrites Airtable records only through the controlled source-mapping/canonical ingestion gateway.\n\nCONTROL BOUNDARY\nConnector Writer has no unrestricted reporting-table authority.\n\nDOCUMENTATION STATUS\nFirst-client Airtable adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_connector_sync_completion($1,$2,$3::timestamptz,$4::timestamptz,$5::timestamptz,$6::integer,$7::integer,$8::integer) AS sync_result;",
+          "options": {
+            "queryReplacement": "={{ [ $('VAL | Normalize Airtable Opportunities').item.json.event_id, $('VAL | Normalize Airtable Opportunities').item.json.connector_key, $('VAL | Normalize Airtable Opportunities').item.json.query_start_at, $('VAL | Normalize Airtable Opportunities').item.json.query_end_at, $('VAL | Normalize Airtable Opportunities').item.json.watermark, $('VAL | Normalize Airtable Opportunities').item.json.source_count, $('VAL | Normalize Airtable Opportunities').item.json.record_count, $('VAL | Normalize Airtable Opportunities').item.json.rejected_count ] }}"
+          }
+        },
+        "id": "air09audit",
+        "name": "AUD | Complete Airtable Sync",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1820,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nAUD | Complete Airtable Sync\n\nPURPOSE\nAdvances the cursor and records completion only after canonical ingestion succeeds.\n\nCONTROL BOUNDARY\nAudit Writer cannot modify reporting facts.\n\nDOCUMENTATION STATUS\nFirst-client Airtable adapter — 2026-09-29."
+      },
+      {
+        "parameters": {},
+        "id": "air10skip",
+        "name": "SYS | Airtable Circuit Open — Skip Sync",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1040,
+          160
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Incremental Opportunity Sync\n\nNODE\nSYS | Airtable Circuit Open — Skip Sync\n\nPURPOSE\nStops external Airtable work while the circuit is blocked.\n\nCONTROL BOUNDARY\nNo source/database mutation occurs.\n\nDOCUMENTATION STATUS\nFirst-client Airtable adapter — 2026-09-29."
+      }
+    ],
+    "connections": {
+      "INT | Fifteen-Minute Airtable Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Airtable Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "INT | Manual Airtable Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Airtable Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Load Airtable Sync Context": {
+        "main": [
+          [
+            {
+              "node": "CTX | Build Airtable Search",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Build Airtable Search": {
+        "main": [
+          [
+            {
+              "node": "VAL | Airtable Sync Allowed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Airtable Sync Allowed?": {
+        "main": [
+          [
+            {
+              "node": "SRC | Fetch Airtable Opportunities",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "SYS | Airtable Circuit Open — Skip Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SRC | Fetch Airtable Opportunities": {
+        "main": [
+          [
+            {
+              "node": "VAL | Normalize Airtable Opportunities",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Normalize Airtable Opportunities": {
+        "main": [
+          [
+            {
+              "node": "DB | Ingest Airtable Batch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Ingest Airtable Batch": {
+        "main": [
+          [
+            {
+              "node": "AUD | Complete Airtable Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "versionId": "56ea938b-04b5-4e78-81b4-c2972f4cb220",
+    "tags": []
+  }
+]
