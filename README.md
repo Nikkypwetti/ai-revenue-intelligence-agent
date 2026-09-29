@@ -55,6 +55,12 @@ See [First Client Implementation](docs/first-client-implementation.md) and [firs
 
 A GitHub Actions static-verification workflow validates JSON, shell syntax, client connector policy, and secret-like committed file names on pull requests and pushes to main.
 
+## Local production hardening without VPS/domain
+
+The current laptop deployment can complete substantial production hardening before any VPS or domain purchase. The repository now includes a non-destructive PostgreSQL 17 restore rehearsal, bounded local report API load testing, encrypted off-device backup replication, and reusable HubSpot/Salesforce/Airtable sync governance.
+
+See [Local Production Hardening](docs/local-production-hardening.md).
+
 ## Revenue Question Pack
 
 - [37 governed KPIs and reusable data-domain model](docs/revenue-question-pack-v2.md)
