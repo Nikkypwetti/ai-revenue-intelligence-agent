@@ -35,6 +35,8 @@ Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent e
 
 **Monitoring & Observability** adds governed component/overall runtime status views, alert-ready circuit/failure/dead-letter rows, a bounded runtime snapshot function, and a five-minute Agent v2 heartbeat that persists snapshot history through the existing Audit Writer boundary.
 
+**Governed Incident Notifications** consumes only the bounded `observability.alert_ready` surface, applies trusted severity/cooldown/deduplication policy, sends through a dedicated Slack incident credential and trusted destination, and routes final provider failures back through the reliability/dead-letter core. It remains disabled until a real incident channel/token is configured. See `docs/incident-notifications.md`.
+
 **Backup & Recovery** adds atomic owner-only backups of both Agent v2 PostgreSQL databases and the n8n persistent data volume, SHA-256 integrity manifests, encryption-key fingerprint validation, isolated restore drills, a guarded live-restore path with mandatory pre-restore backup, 14-day local retention, and an idempotent daily cron schedule.
 
 **Upgrade & Rollback** adds immutable digest-pinned runtime images, drift-detecting release checkpoints, checkpoint-first upgrades, PostgreSQL-major upgrade protection, health-gated deployment, exact-image rollback metadata, guarded rollback integration, and full post-change regression verification.

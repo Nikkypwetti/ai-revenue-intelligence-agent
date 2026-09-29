@@ -1,0 +1,206 @@
+[
+  {
+    "id": "REVINTV2INCIDENT01",
+    "name": "REVINT-V2-INCIDENT-01 | Governed Incident Notifications",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 5
+              }
+            ]
+          }
+        },
+        "id": "inc01schedule",
+        "name": "INT | Five-Minute Incident Check",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | Governed Incident Notifications\n\nNODE\nINT | Five-Minute Incident Check\n\nPURPOSE\nPolls only the bounded observability alert surface every five minutes.\n\nCONTROL BOUNDARY\nTrigger only; no notification destination or severity is supplied externally.\n\nDOCUMENTATION STATUS\nIncident notification adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT to_jsonb(p) AS alert FROM observability.get_pending_incident_notifications() p;",
+          "options": {}
+        },
+        "id": "inc02pending",
+        "name": "DB | Load Pending Incident Alerts",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          260,
+          0
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 3000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | Governed Incident Notifications\n\nNODE\nDB | Load Pending Incident Alerts\n\nPURPOSE\nLoads only alert-ready rows that pass governed severity, destination, cooldown and deduplication policy.\n\nCONTROL BOUNDARY\nReporting RO calls a bounded SECURITY DEFINER function and cannot read raw failure/dead-letter tables.\n\nDOCUMENTATION STATUS\nIncident notification adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "let a=$json.alert;\nif(typeof a==='string'){try{a=JSON.parse(a)}catch{a=null}}\nif(!a || !a.alert_key || !a.destination_id || !['warning','critical'].includes(a.severity)){\n  throw new Error('INCIDENT_ALERT_ENVELOPE_INVALID');\n}\nconst clean=v=>String(v??'').replace(/[<>]/g,'').replace(/[\\u0000-\\u001f\\u007f]/g,' ').slice(0,1000);\nconst prefix=a.severity==='critical'?'CRITICAL':'WARNING';\nconst lines=[\n  '*Revenue Intelligence Agent — '+prefix+'*',\n  '*Component:* '+clean(a.component_key),\n  '*Alert:* '+clean(a.alert_type),\n  '*Summary:* '+clean(a.summary),\n  a.first_observed_at?'*First observed:* '+clean(a.first_observed_at):null\n].filter(Boolean);\nreturn {\n  incident:a,\n  slack_payload:{\n    channel_id:a.destination_id,\n    text:lines.join('\\n')\n  }\n};"
+        },
+        "id": "inc03payload",
+        "name": "REP | Build Incident Slack Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | Governed Incident Notifications\n\nNODE\nREP | Build Incident Slack Payload\n\nPURPOSE\nCreates a bounded operational message from governed alert metadata.\n\nCONTROL BOUNDARY\nDestination comes only from governance; raw request payloads, stack traces and credentials are excluded.\n\nDOCUMENTATION STATUS\nIncident notification adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "={{ $json.slack_payload.channel_id }}",
+            "mode": "id"
+          },
+          "text": "={{ $json.slack_payload.text }}",
+          "otherOptions": {}
+        },
+        "id": "inc04send",
+        "name": "DEL | Send Incident Slack Alert",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.7,
+        "position": [
+          780,
+          0
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 3000,
+        "credentials": {
+          "slackApi": {
+            "id": "REVINTSLACKINCIDENT001",
+            "name": "REVINT | Slack Incidents"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | Governed Incident Notifications\n\nNODE\nDEL | Send Incident Slack Alert\n\nPURPOSE\nSends the governed incident to the trusted operational destination.\n\nCONTROL BOUNDARY\nUses a dedicated incident credential separate from manager-report delivery. Final provider failure enters the reliability/dead-letter workflow.\n\nDOCUMENTATION STATUS\nIncident notification adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const original=$('REP | Build Incident Slack Payload').item.json;\nconst response=$json??{};\nreturn {\n  incident:original.incident,\n  delivery_result:{\n    status:'delivered',\n    provider:'slack',\n    message_ref:response.ts??response.message?.ts??null,\n    delivered_at:new Date().toISOString()\n  }\n};"
+        },
+        "id": "inc05normalize",
+        "name": "CTX | Normalize Incident Delivery",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1040,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | Governed Incident Notifications\n\nNODE\nCTX | Normalize Incident Delivery\n\nPURPOSE\nReduces Slack response to bounded delivery metadata.\n\nCONTROL BOUNDARY\nRaw provider response and credential data are not persisted.\n\nDOCUMENTATION STATUS\nIncident notification adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_incident_notification_success($1,$2,$3,$4,$5) AS incident_result;",
+          "options": {
+            "queryReplacement": "={{ [ 'EVT-INCIDENT-' + $json.incident.alert_key + '-' + Date.now(), $json.incident.alert_key, $json.incident.severity, 'slack', $json.delivery_result.message_ref ] }}"
+          }
+        },
+        "id": "inc06audit",
+        "name": "AUD | Record Incident Notification",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1300,
+          0
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 3000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | Governed Incident Notifications\n\nNODE\nAUD | Record Incident Notification\n\nPURPOSE\nUpdates deduplication/cooldown state and appends a bounded audit event after successful delivery.\n\nCONTROL BOUNDARY\nAudit Writer cannot read reporting facts; only the governed success function is callable.\n\nDOCUMENTATION STATUS\nIncident notification adapter — 2026-09-29."
+      }
+    ],
+    "connections": {
+      "INT | Five-Minute Incident Check": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Pending Incident Alerts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Load Pending Incident Alerts": {
+        "main": [
+          [
+            {
+              "node": "REP | Build Incident Slack Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Build Incident Slack Payload": {
+        "main": [
+          [
+            {
+              "node": "DEL | Send Incident Slack Alert",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DEL | Send Incident Slack Alert": {
+        "main": [
+          [
+            {
+              "node": "CTX | Normalize Incident Delivery",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Normalize Incident Delivery": {
+        "main": [
+          [
+            {
+              "node": "AUD | Record Incident Notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "versionId": "8b71a0b2-4efb-4d72-9c96-24d0941802e9",
+    "tags": []
+  }
+]
