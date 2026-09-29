@@ -155,6 +155,12 @@ permission_state="$(psql_admin -c "
   exit 1
 }
 
+expected_components="$(psql_admin -c "
+  SELECT count(*)
+  FROM governance.reliability_policy
+  WHERE active;
+")"
+
 baseline="$(psql_reader -c "
   SELECT
     overall_status || '|' ||
@@ -164,8 +170,8 @@ baseline="$(psql_reader -c "
   FROM observability.runtime_status;
 ")"
 IFS='|' read -r baseline_status baseline_components baseline_failures baseline_dlq <<< "$baseline"
-[[ "$baseline_components" == "4" ]] || {
-  echo "FAIL: runtime status does not expose the four managed components."
+[[ "$baseline_components" == "$expected_components" ]] || {
+  echo "FAIL: runtime status component count does not match active reliability policy."
   exit 1
 }
 [[ "$baseline_status" =~ ^(healthy|degraded|blocked|unknown)$ ]] || {
@@ -181,8 +187,8 @@ snapshot_baseline="$(psql_reader -c "
   FROM (SELECT observability.build_runtime_snapshot() AS s) q;
 ")"
 IFS='|' read -r snapshot_status snapshot_overall snapshot_components <<< "$snapshot_baseline"
-[[ "$snapshot_status" == "generated" && "$snapshot_components" == "4" ]] || {
-  echo "FAIL: bounded runtime snapshot is incomplete."
+[[ "$snapshot_status" == "generated" && "$snapshot_components" == "$expected_components" ]] || {
+  echo "FAIL: bounded runtime snapshot component count is incomplete."
   exit 1
 }
 
@@ -274,6 +280,8 @@ circuit_alert="$(psql_reader -c "
   exit 1
 }
 
+expected_with_verify=$((expected_components + 1))
+
 blocked_snapshot="$(psql_reader -c "
   SELECT
     (s->>'overall_status') || '|' ||
@@ -282,7 +290,7 @@ blocked_snapshot="$(psql_reader -c "
   FROM (SELECT observability.build_runtime_snapshot() AS s) q;
 ")"
 IFS='|' read -r blocked_overall blocked_components blocked_alerts <<< "$blocked_snapshot"
-[[ "$blocked_overall" == "blocked" && "$blocked_components" == "5" && "$blocked_alerts" -ge 3 ]] || {
+[[ "$blocked_overall" == "blocked" && "$blocked_components" == "$expected_with_verify" && "$blocked_alerts" -ge 3 ]] || {
   echo "FAIL: runtime snapshot did not surface the blocked verification component."
   exit 1
 }
