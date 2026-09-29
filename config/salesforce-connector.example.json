@@ -1,0 +1,31 @@
+{
+  "schema_version": 2,
+  "connectors": [
+    {
+      "connector_key": "salesforce_primary",
+      "connector_type": "salesforce",
+      "display_name": "Salesforce Opportunities Shadow Sync",
+      "object_type": "deal",
+      "contract_version": 1,
+      "active": false,
+      "field_mappings": [
+        {"canonical_field":"deal_name","source_field":"Name","transform_key":"text","required":false},
+        {"canonical_field":"amount","source_field":"Amount","transform_key":"numeric","required":true},
+        {"canonical_field":"currency_code","source_field":"CurrencyIsoCode","default_value":"USD","transform_key":"uppercase","required":true},
+        {"canonical_field":"stage_name","source_field":"StageName","transform_key":"text","required":true},
+        {"canonical_field":"stage_category","source_field":"revint_stage_category","transform_key":"value_map","required":true},
+        {"canonical_field":"sales_rep","source_field":"OwnerId","transform_key":"text","required":false},
+        {"canonical_field":"lead_source","source_field":"LeadSource","transform_key":"text","required":false},
+        {"canonical_field":"created_at","source_field":"CreatedDate","transform_key":"timestamp","required":false},
+        {"canonical_field":"expected_close_date","source_field":"CloseDate","transform_key":"timestamp","required":false},
+        {"canonical_field":"closed_at","source_field":"revint_closed_at","transform_key":"timestamp","required":false},
+        {"canonical_field":"source_updated_at","source_field":"LastModifiedDate","transform_key":"timestamp","required":true}
+      ],
+      "value_mappings": [
+        {"canonical_field":"stage_category","source_value":"open","canonical_value":"open"},
+        {"canonical_field":"stage_category","source_value":"won","canonical_value":"won"},
+        {"canonical_field":"stage_category","source_value":"lost","canonical_value":"lost"}
+      ]
+    }
+  ]
+}
