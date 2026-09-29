@@ -96,16 +96,25 @@ assert send['credentials']['slackApi']['id']=='REVINTSLACKREPORT001'
 agent=json.load(open('workflows/runtime-templates/REVINT-V2-AGENT-01.json'))
 agent=agent[0] if isinstance(agent,list) else agent
 an={n['name'] for n in agent['nodes']}
-assert {'CTX | Prepare Delivery Request','DEL | Run Governed Delivery Adapter'} <= an
+assert {'CTX | Prepare Delivery Request','VAL | Slack Delivery Requested?','DEL | Run Governed Delivery Adapter','VAL | Email Delivery Requested?','DEL | Run Governed Email Delivery Adapter','CTX | Attach Delivery Result'} <= an
 code=next(n for n in agent['nodes'] if n['name']=='CTX | Interpret Report Request')['parameters']['jsCode']
-assert "delivery_channel must be api or slack" in code
+assert "delivery_channel must be api, slack, or email" in code
+prep=next(n for n in agent['nodes'] if n['name']=='CTX | Prepare Delivery Request')['parameters']['jsCode']
+assert "slack_delivery_requested" in prep and "email_delivery_requested" in prep
+email_call=next(n for n in agent['nodes'] if n['name']=='DEL | Run Governed Email Delivery Adapter')
+assert email_call['parameters']['workflowId']['value']=='REVINTV2EMAIL01'
+slack_gate=agent['connections']['VAL | Slack Delivery Requested?']['main']
+assert slack_gate[1][0]['node']=='VAL | Email Delivery Requested?'
+email_gate=agent['connections']['VAL | Email Delivery Requested?']['main']
+assert email_gate[0][0]['node']=='DEL | Run Governed Email Delivery Adapter'
+assert email_gate[1][0]['node']=='AUD | Log Report Result'
 ret=next(n for n in agent['nodes'] if n['name']=='DEL | Return Report Response')
 assert "CTX | Attach Delivery Result" in ret['parameters']['responseBody']
-print('PASS: delivery workflow structure and Agent Core wiring are bounded.')
+print('PASS: Slack + Gmail delivery workflow structure and Agent Core routing are bounded.')
 PY
 
 echo "PASS: delivery defaults disabled."
 echo "PASS: trusted destination resolves only after explicit enablement."
 echo "PASS: delivery is role-gated and sales-rep delivery fails closed."
 echo "PASS: reporting reader can resolve delivery without reading destination registry."
-echo "PASS: reusable Agent V2 delivery adapter verification passed."
+echo "PASS: reusable Agent V2 multi-channel delivery adapter verification passed."
