@@ -10,6 +10,7 @@ set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
+export ENV_FILE COMPOSE_FILE
 
 required=(
   REPORTING_DB_ADMIN_USER REPORTING_DB_NAME
@@ -37,6 +38,14 @@ psql_n8n() {
 
 cleanup() {
   psql_admin -c "
+    UPDATE governance.service_identity_registry
+    SET principal_key='service:report-api', updated_at=now()
+    WHERE service_key='report_api'
+      AND EXISTS (
+        SELECT 1 FROM governance.principal_registry
+        WHERE principal_key='service:report-api'
+      );
+
     DELETE FROM audit.agent_events
     WHERE stage='agent_core'
       AND actor='n8n_agent_core'
@@ -223,6 +232,7 @@ SQL
 python3 - <<'PY'
 import json
 import os
+import subprocess
 import urllib.error
 import urllib.request
 
@@ -253,16 +263,33 @@ status, _ = post(
 if status != 403:
     raise SystemExit(f"FAIL: unauthenticated report request returned {status}, expected 403")
 
+def bind_service(principal):
+    safe = principal.replace("'", "''")
+    sql = (
+        "UPDATE governance.service_identity_registry "
+        "SET principal_key='" + safe + "', updated_at=now() "
+        "WHERE service_key='report_api';"
+    )
+    subprocess.run([
+        "docker","compose","--env-file",os.environ["ENV_FILE"],
+        "-f",os.environ["COMPOSE_FILE"],"exec","-T","reporting-db",
+        "psql","-X","-q","-v","ON_ERROR_STOP=1",
+        "-U",os.environ["REPORTING_DB_ADMIN_USER"],
+        "-d",os.environ["REPORTING_DB_NAME"],
+    ], input=sql.encode(), check=True, stdout=subprocess.DEVNULL)
+
+bind_service("verify-agent-rep-a")
 status, body = post({
-    "principal_key":"verify-agent-rep-a",
+    "principal_key":"verify-agent-admin",
     "question":"What is our open pipeline this month?"
 })
 value = body.get("report",{}).get("current_period",{}).get("value")
 if status != 200 or body.get("status") != "success" or float(value) != 1000.0:
-    raise SystemExit(f"FAIL: own-scope open pipeline response was {status} {body}")
+    raise SystemExit(f"FAIL: service-bound own-scope response was {status} {body}")
 
+bind_service("verify-agent-manager")
 status, body = post({
-    "principal_key":"verify-agent-manager",
+    "principal_key":"verify-agent-admin",
     "question":"Compare open pipeline this month with previous period."
 })
 report = body.get("report",{})
@@ -279,8 +306,9 @@ if (
 ):
     raise SystemExit(f"FAIL: department comparison response was {status} {body}")
 
+bind_service("verify-agent-admin")
 status, body = post({
-    "principal_key":"verify-agent-admin",
+    "principal_key":"verify-agent-rep-a",
     "structured_intent":{
         "kpi_key":"open_pipeline",
         "period_key":"this_month",
@@ -292,8 +320,9 @@ value = body.get("report",{}).get("current_period",{}).get("value")
 if status != 200 or float(value) != 1000.0:
     raise SystemExit(f"FAIL: structured filtered admin response was {status} {body}")
 
+bind_service("verify-agent-manager")
 status, body = post({
-    "principal_key":"verify-agent-manager",
+    "principal_key":"verify-agent-admin",
     "question":"How is pipeline by sales rep this month?"
 })
 report = body.get("report",{})
@@ -308,22 +337,26 @@ if (
 ):
     raise SystemExit(f"FAIL: sales-rep pipeline breakdown was {status} {body}")
 
+bind_service("verify-agent-rep-a")
 status, body = post({
-    "principal_key":"verify-agent-rep-a",
+    "principal_key":"verify-agent-admin",
     "question":"What is our win rate?"
 })
 codes = [q.get("code") for q in body.get("questions",[])]
 if status != 422 or "PERIOD_CLARIFICATION_REQUIRED" not in codes:
     raise SystemExit(f"FAIL: missing-period clarification response was {status} {body}")
 
+bind_service("verify-agent-unmapped")
 status, body = post({
-    "principal_key":"verify-agent-unmapped",
+    "principal_key":"verify-agent-admin",
     "question":"What is our open pipeline this month?"
 })
 if status != 403 or body.get("status") != "rejected":
     raise SystemExit(f"FAIL: unmapped own-scope principal response was {status} {body}")
 
-print("PASS: authenticated natural-language KPI request respects own data scope.")
+bind_service("service:report-api")
+print("PASS: authenticated report service overrides caller-supplied principal identity.")
+print("PASS: service-bound natural-language KPI request respects configured data scope.")
 print("PASS: comparison request returns deterministic current/previous analysis.")
 print("PASS: structured intent applies an approved governed filter.")
 print("PASS: governed one-dimension breakdown executes and missing-period requests still clarify.")
