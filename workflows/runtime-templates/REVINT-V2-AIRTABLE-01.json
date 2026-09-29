@@ -1,0 +1,341 @@
+[
+  {
+    "id": "REVINTV2AIRTABLE01",
+    "name": "REVINT-V2-AIRTABLE-01 | Lead Funnel Sync",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 60
+              }
+            ]
+          }
+        },
+        "id": "at01schedule",
+        "name": "INT | Hourly Airtable Funnel Sync",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Lead Funnel Sync\n\nNODE\nINT | Hourly Airtable Funnel Sync\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nRuns the bounded Airtable funnel scan hourly.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 funnel contract. Client PAT, base/table IDs, mappings and activation are configuration.\n\nCONTROL BOUNDARY\nTrigger only; grants no source or database authority.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {},
+        "id": "at02manual",
+        "name": "INT | Manual Airtable Funnel Sync",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Lead Funnel Sync\n\nNODE\nINT | Manual Airtable Funnel Sync\n\nLAYER\nIntake / Trigger\n\nPURPOSE\nManual validation/probe entrypoint for Airtable funnel sync.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 funnel contract. Client PAT, base/table IDs, mappings and activation are configuration.\n\nCONTROL BOUNDARY\nTrigger only; grants no source or database authority.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.get_client_connector_sync_context('airtable_leads','airtable') AS sync_context;",
+          "options": {}
+        },
+        "id": "at03context",
+        "name": "DB | Load Airtable Sync Context",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          260,
+          10
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Lead Funnel Sync\n\nNODE\nDB | Load Airtable Sync Context\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nLoads connector activation, window and reliability gate.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 funnel contract. Client PAT, base/table IDs, mappings and activation are configuration.\n\nCONTROL BOUNDARY\nUses only the bounded Reporting RO governance function.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const raw = $('DB | Load Airtable Sync Context').item.json.sync_context;\nconst ctx = typeof raw === 'string' ? JSON.parse(raw) : raw;\nif (!ctx || ctx.connector_key !== 'airtable_leads') throw new Error('AIRTABLE_SYNC_CONTEXT_INVALID');\nlet gate = ctx.reliability_gate;\nif (typeof gate === 'string') gate = JSON.parse(gate);\nconst allowed = gate?.allowed === true;\nreturn {sync_context:ctx,should_sync:allowed,skip_reason:allowed?null:'RELIABILITY_CIRCUIT_OPEN'};"
+        },
+        "id": "at04request",
+        "name": "CTX | Prepare Airtable Read",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          10
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Lead Funnel Sync\n\nNODE\nCTX | Prepare Airtable Read\n\nLAYER\nContext / Interpretation\n\nPURPOSE\nValidates governed context before the Airtable read.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 funnel contract. Client PAT, base/table IDs, mappings and activation are configuration.\n\nCONTROL BOUNDARY\nNo caller or AI can select another base/table; those are deployment environment values.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "at-allowed",
+                "leftValue": "={{ $json.should_sync }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "at05if",
+        "name": "VAL | Sync Allowed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          780,
+          10
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Lead Funnel Sync\n\nNODE\nVAL | Sync Allowed?\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nStops source access while the Airtable reliability circuit is open.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 funnel contract. Client PAT, base/table IDs, mappings and activation are configuration.\n\nCONTROL BOUNDARY\nFail-closed deterministic gate.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "authentication": "airtableTokenApi",
+          "resource": "record",
+          "operation": "search",
+          "base": {
+            "__rl": true,
+            "value": "={{ $env.AIRTABLE_BASE_ID }}",
+            "mode": "id"
+          },
+          "table": {
+            "__rl": true,
+            "value": "={{ $env.AIRTABLE_TABLE_ID }}",
+            "mode": "id"
+          },
+          "filterByFormula": "",
+          "returnAll": true,
+          "options": {},
+          "sort": {}
+        },
+        "id": "at06source",
+        "name": "SRC | Read Airtable Lead Records",
+        "type": "n8n-nodes-base.airtable",
+        "typeVersion": 2.2,
+        "position": [
+          1040,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "airtableTokenApi": {
+            "id": "REVINTAIRTABLE001",
+            "name": "REVINT | Airtable Leads RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Lead Funnel Sync\n\nNODE\nSRC | Read Airtable Lead Records\n\nLAYER\nSource Adapter\n\nPURPOSE\nReads the configured Airtable lead table using a dedicated PAT credential.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 funnel contract. Client PAT, base/table IDs, mappings and activation are configuration.\n\nCONTROL BOUNDARY\nRead operation only. The workflow never creates, updates, or deletes Airtable records.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const raw = $('DB | Load Airtable Sync Context').first().json.sync_context;\nconst ctx = typeof raw === 'string' ? JSON.parse(raw) : raw;\nconst rows = $input.all().map(item => item.json ?? {});\nif (rows.length > 10000) throw new Error('AIRTABLE_SYNC_RESULT_LIMIT_EXCEEDED');\n\nconst parseDate = value => {\n  if (value === null || value === undefined || value === '') return null;\n  const d = new Date(value);\n  return Number.isNaN(d.getTime()) ? null : d.toISOString();\n};\nconst records=[];\nlet rejectedCount=0;\nlet earliestRejectedAt=null;\n\nfor (const r of rows) {\n  const id=String(r.id ?? r.recordId ?? '').trim();\n  const createdAt=parseDate(r.createdTime ?? r['Created time'] ?? r['Created At']);\n  const updatedAt=parseDate(r['Last Modified'] ?? r['Last modified'] ?? r['Last Modified Time'] ?? createdAt);\n  const valid=id.length>0 && id.length<=200 && createdAt!==null;\n  if (!valid) {\n    rejectedCount += 1;\n    const candidate=updatedAt ? new Date(updatedAt).getTime() : null;\n    if (candidate!==null && (earliestRejectedAt===null || candidate<earliestRejectedAt)) earliestRejectedAt=candidate;\n    continue;\n  }\n\n  // Lifecycle timestamps are only populated when explicit source fields exist.\n  // AI Qualified / AI Score alone are not treated as timestamp evidence.\n  records.push({\n    source_record_id:id,\n    source_payload:{\n      'Assigned Owner':r['Assigned Owner'] ?? null,\n      'Team size':r['Team size'] ?? null,\n      'Business type':r['Business type'] ?? null,\n      revint_lead_source:r['Lead Source'] ?? 'airtable_intake',\n      revint_created_at:createdAt,\n      revint_mql_at:parseDate(r['MQL at']),\n      revint_sql_at:parseDate(r['SQL at']),\n      revint_opportunity_at:parseDate(r['Opportunity at']),\n      revint_won_at:parseDate(r['Won at']),\n      revint_lost_at:parseDate(r['Lost at']),\n      revint_source_updated_at:updatedAt\n    }\n  });\n}\n\nconst queryStart=new Date(ctx.query_start_at).getTime();\nconst queryEnd=new Date(ctx.query_end_at).getTime();\nlet watermarkMs=queryEnd;\nif (rejectedCount>0) watermarkMs=earliestRejectedAt===null ? queryStart : Math.max(queryStart,earliestRejectedAt);\n\nreturn [{json:{\n  connector_key:'airtable_leads',\n  query_start_at:new Date(queryStart).toISOString(),\n  query_end_at:new Date(queryEnd).toISOString(),\n  watermark:new Date(watermarkMs).toISOString(),\n  source_count:rows.length,\n  record_count:records.length,\n  rejected_count:rejectedCount,\n  records,\n  event_id:'AIRTABLE-SYNC-' + String(queryEnd)\n}}];"
+        },
+        "id": "at07normalize",
+        "name": "VAL | Normalize Airtable Funnel",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Lead Funnel Sync\n\nNODE\nVAL | Normalize Airtable Funnel\n\nLAYER\nValidation / Data Minimization\n\nPURPOSE\nProjects Airtable leads into the minimal funnel contract and omits unnecessary PII/notes.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 funnel contract. Client PAT, base/table IDs, mappings and activation are configuration.\n\nCONTROL BOUNDARY\nOnly explicit lifecycle timestamps are accepted; AI scores/statuses cannot fabricate timestamps.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT ingestion.ingest_funnel_batch_from_source($1,$2::jsonb) AS batch_result;",
+          "options": {
+            "queryReplacement": "={{ [ $json.connector_key, JSON.stringify($json.records) ] }}"
+          }
+        },
+        "id": "at08ingest",
+        "name": "DB | Ingest Airtable Funnel Batch",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1560,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGINGESTWR001",
+            "name": "REVINT | Connector Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Lead Funnel Sync\n\nNODE\nDB | Ingest Airtable Funnel Batch\n\nLAYER\nDatabase / Governed Execution\n\nPURPOSE\nWrites only through the bounded funnel ingestion gateway.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 funnel contract. Client PAT, base/table IDs, mappings and activation are configuration.\n\nCONTROL BOUNDARY\nConnector Writer cannot directly read/write reporting funnel facts.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_client_connector_sync_completion($1,$2,$3::timestamptz,$4::timestamptz,$5::timestamptz,$6::integer,$7::integer,$8::integer) AS sync_result;",
+          "options": {
+            "queryReplacement": "={{ [ $('VAL | Normalize Airtable Funnel').item.json.event_id, $('VAL | Normalize Airtable Funnel').item.json.connector_key, $('VAL | Normalize Airtable Funnel').item.json.query_start_at, $('VAL | Normalize Airtable Funnel').item.json.query_end_at, $('VAL | Normalize Airtable Funnel').item.json.watermark, $('VAL | Normalize Airtable Funnel').item.json.source_count, $('VAL | Normalize Airtable Funnel').item.json.record_count, $('VAL | Normalize Airtable Funnel').item.json.rejected_count ] }}"
+          }
+        },
+        "id": "at09audit",
+        "name": "AUD | Complete Airtable Sync",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1820,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Lead Funnel Sync\n\nNODE\nAUD | Complete Airtable Sync\n\nLAYER\nAudit / Reliability\n\nPURPOSE\nAdvances the governed sync cursor only after ingestion and appends completion evidence.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 funnel contract. Client PAT, base/table IDs, mappings and activation are configuration.\n\nCONTROL BOUNDARY\nAudit Writer is isolated from reporting read/write privileges.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {},
+        "id": "at10skip",
+        "name": "SYS | Circuit Open — Skip Airtable",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1040,
+          140
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AIRTABLE-01 | Lead Funnel Sync\n\nNODE\nSYS | Circuit Open — Skip Airtable\n\nLAYER\nReliability\n\nPURPOSE\nEnds the execution without contacting Airtable when the circuit is open.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 funnel contract. Client PAT, base/table IDs, mappings and activation are configuration.\n\nCONTROL BOUNDARY\nNo source or data mutation occurs.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      }
+    ],
+    "connections": {
+      "INT | Hourly Airtable Funnel Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Airtable Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "INT | Manual Airtable Funnel Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Airtable Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Load Airtable Sync Context": {
+        "main": [
+          [
+            {
+              "node": "CTX | Prepare Airtable Read",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Prepare Airtable Read": {
+        "main": [
+          [
+            {
+              "node": "VAL | Sync Allowed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Sync Allowed?": {
+        "main": [
+          [
+            {
+              "node": "SRC | Read Airtable Lead Records",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "SYS | Circuit Open — Skip Airtable",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SRC | Read Airtable Lead Records": {
+        "main": [
+          [
+            {
+              "node": "VAL | Normalize Airtable Funnel",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Normalize Airtable Funnel": {
+        "main": [
+          [
+            {
+              "node": "DB | Ingest Airtable Funnel Batch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Ingest Airtable Funnel Batch": {
+        "main": [
+          [
+            {
+              "node": "AUD | Complete Airtable Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "pinData": {},
+    "tags": []
+  }
+]
