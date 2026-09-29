@@ -22,9 +22,17 @@ Live activation requires a dedicated private-app token and the explicit `REVINT_
 
 `runtime-templates/REVINT-V2-AGENT-01.json`
 
-The locally verified report execution core. It accepts authenticated report requests, interprets the four currently governed KPIs through a bounded deterministic fallback or a structured-intent contract, calls the PostgreSQL authorization/execution gateway, returns safe clarification or report responses, and writes bounded audit events.
+The locally verified report execution core. It accepts authenticated report requests, optionally calls the internal governed intelligence adapter, revalidates the structured intent against the Revenue Question Pack, calls the PostgreSQL authorization/execution gateway, optionally attaches a grounded management summary, builds a delivery-neutral presentation artifact, and writes bounded audit events.
 
-A live LLM model credential is intentionally not embedded in this template. A future model adapter must produce the same structured-intent contract and remains downstream of the same deterministic authorization boundary.
+AI remains optional: the deterministic natural-language interpreter and governed query layer continue to work when Groq is disabled or unavailable.
+
+### REVINT-V2-AI-01 — Governed Intelligence Adapter
+
+`runtime-templates/REVINT-V2-AI-01.json`
+
+Internal-only optional Groq adapter that ports structured intent parsing and grounded management summaries from the earlier `REVINT-01` workflow. It has no public webhook, uses a dedicated encrypted Agent V2 Groq credential, is safe-disabled by default, and cannot bypass V2 semantic/RBAC/database controls.
+
+The Agent Core calls it with fail-soft behavior: intent falls back to deterministic interpretation and summary generation is omitted when the provider is unavailable.
 
 ### REVINT-V2-SCHEDULED-01 — Pipeline Intelligence
 

@@ -31,14 +31,14 @@
       },
       {
         "parameters": {
-          "jsCode": "const raw = $json;\nconst body = raw.body && typeof raw.body === 'object' && !Array.isArray(raw.body) ? raw.body : raw;\nconst authSource = String(raw.__revint_auth_source ?? '').trim();\nconst authenticationSource = ['sso','service'].includes(authSource) ? authSource : 'unknown';\nconst now = new Date();\nconst suffix = Math.random().toString(36).slice(2, 10).toUpperCase();\nconst requestId = 'AGENT-' + now.getTime() + '-' + suffix;\nconst correlationId = 'CORR-' + now.getTime() + '-' + suffix;\nconst errors = [];\nconst clarifications = [];\nif (raw.__revint_security_error) {\n  errors.push({code:String(raw.__revint_security_error), message:'Request rejected by the Agent security gateway.'});\n}\n\nconst principalKey = typeof body.principal_key === 'string' ? body.principal_key.trim() : '';\nif (!principalKey || principalKey.length > 128) {\n  errors.push({code:'PRINCIPAL_KEY_REQUIRED', message:'A valid principal_key is required.'});\n}\n\nconst allowedKpis = new Set([\n  'closed_won_revenue','open_pipeline','closed_won_deals','win_rate',\n  'open_deals_count','weighted_pipeline','pipeline_coverage_ratio',\n  'stale_open_deals_count','stale_pipeline_value','missing_close_date_deals',\n  'average_deal_size','closed_lost_deals','loss_rate','average_acv',\n  'average_discount_percent','commit_forecast','best_case_forecast',\n  'forecast_accuracy','average_sales_cycle_days','average_stage_age_days',\n  'pipeline_velocity','quota_attainment','speed_to_lead_hours',\n  'follow_up_sla_compliance','overdue_followups','crm_data_quality_score',\n  'missing_owner_deals','lead_to_mql_rate','mql_to_sql_rate',\n  'sql_to_opportunity_rate','opportunity_to_won_rate','current_mrr',\n  'current_arr','expansion_mrr','churned_mrr','net_revenue_retention',\n  'gross_revenue_retention'\n]);\nconst allowedPeriods = new Set([\n  'today','yesterday','this_week','last_week','this_month','last_month',\n  'this_quarter','last_quarter','this_year','last_year'\n]);\nconst allowedModes = new Set([\n  'metric_report','trend_report','comparison_report','breakdown_report','diagnostic_report'\n]);\nconst allowedDimensions = new Set([\n  'sales_rep','deal_stage','lead_source','segment','region','industry','campaign','forecast_category'\n]);\nconst allowedFilterFields = new Set([\n  'sales_rep','deal_stage','lead_source','segment','region','industry','campaign','forecast_category'\n]);\n\nfunction normalizeFilters(input) {\n  if (input === undefined || input === null) return {};\n  if (typeof input !== 'object' || Array.isArray(input)) {\n    errors.push({code:'FILTERS_INVALID', message:'filters must be an object.'});\n    return {};\n  }\n  const output = {};\n  for (const [field, rawValue] of Object.entries(input)) {\n    if (!allowedFilterFields.has(field)) {\n      errors.push({code:'FILTER_FIELD_NOT_SUPPORTED', message:'Unsupported filter field: ' + field});\n      continue;\n    }\n    const values = Array.isArray(rawValue) ? rawValue : [rawValue];\n    if (\n      values.length === 0 || values.length > 50 ||\n      values.some(v => typeof v !== 'string' || !v.trim() || v.trim().length > 200)\n    ) {\n      errors.push({code:'FILTER_VALUE_INVALID', message:'Invalid filter value for ' + field + '.'});\n      continue;\n    }\n    output[field] = [...new Set(values.map(v => v.trim()))];\n  }\n  return output;\n}\n\nfunction normalizeDimensions(input) {\n  if (input === undefined || input === null) return [];\n  if (!Array.isArray(input)) {\n    errors.push({code:'DIMENSIONS_INVALID', message:'dimensions must be an array.'});\n    return [];\n  }\n  const values = [...new Set(input.map(v => typeof v === 'string' ? v.trim() : ''))].filter(Boolean);\n  if (values.length > 1) {\n    clarifications.push({code:'MULTI_DIMENSION_NOT_SUPPORTED', question:'Please request one breakdown dimension at a time.'});\n  }\n  for (const value of values) {\n    if (!allowedDimensions.has(value)) {\n      errors.push({code:'DIMENSION_NOT_SUPPORTED', message:'Unsupported dimension: ' + value});\n    }\n  }\n  return values;\n}\nfunction inferMetric(q) {\n  const patterns = [\n    ['pipeline_coverage_ratio', /\\bpipeline coverage(?: ratio)?\\b/],\n    ['pipeline_velocity', /\\bpipeline velocity\\b/],\n    ['weighted_pipeline', /\\bweighted pipeline\\b/],\n    ['stale_pipeline_value', /\\bstale pipeline(?: value| amount)?\\b/],\n    ['stale_open_deals_count', /\\b(?:stale open deals?|stale deals? count|number of stale deals?)\\b/],\n    ['open_deals_count', /\\b(?:open deals? count|number of open deals?|how many open deals?)\\b/],\n    ['missing_close_date_deals', /\\b(?:missing close date deals?|deals? (?:with )?missing close dates?)\\b/],\n    ['closed_won_revenue', /\\b(?:closed[\\s-]*won revenue|won revenue|revenue won)\\b/],\n    ['closed_won_deals', /\\b(?:closed[\\s-]*won deals?|won deals? count|number of won deals?|deals? won)\\b/],\n    ['closed_lost_deals', /\\b(?:closed[\\s-]*lost deals?|lost deals? count|number of lost deals?)\\b/],\n    ['average_deal_size', /\\b(?:average|avg) deal size\\b/],\n    ['average_discount_percent', /\\b(?:average|avg) discount(?: percent| percentage)?\\b/],\n    ['average_acv', /\\b(?:average|avg) acv\\b/],\n    ['win_rate', /\\bwin rate\\b/],\n    ['loss_rate', /\\bloss rate\\b/],\n    ['commit_forecast', /\\bcommit forecast\\b/],\n    ['best_case_forecast', /\\bbest[\\s-]*case forecast\\b/],\n    ['forecast_accuracy', /\\bforecast accuracy\\b/],\n    ['average_sales_cycle_days', /\\b(?:average|avg)?\\s*sales cycle(?: days?)?\\b/],\n    ['average_stage_age_days', /\\b(?:average|avg)?\\s*stage age(?: days?)?\\b/],\n    ['quota_attainment', /\\bquota attainment\\b/],\n    ['speed_to_lead_hours', /\\bspeed[\\s-]*to[\\s-]*lead\\b/],\n    ['follow_up_sla_compliance', /\\b(?:follow[\\s-]*up )?sla compliance\\b/],\n    ['overdue_followups', /\\boverdue follow[\\s-]*ups?\\b/],\n    ['crm_data_quality_score', /\\b(?:crm )?data quality(?: score)?\\b/],\n    ['missing_owner_deals', /\\b(?:missing owner deals?|deals? (?:with )?missing owners?|unowned deals?)\\b/],\n    ['lead_to_mql_rate', /\\b(?:lead[\\s-]*to[\\s-]*mql|lead \u2192 mql)(?: conversion| rate)?\\b/],\n    ['mql_to_sql_rate', /\\b(?:mql[\\s-]*to[\\s-]*sql|mql \u2192 sql)(?: conversion| rate)?\\b/],\n    ['sql_to_opportunity_rate', /\\b(?:sql[\\s-]*to[\\s-]*opportunity|sql \u2192 opportunity)(?: conversion| rate)?\\b/],\n    ['opportunity_to_won_rate', /\\b(?:opportunity[\\s-]*to[\\s-]*(?:won|closed won)|opportunity \u2192 (?:won|closed won))(?: conversion| rate)?\\b/],\n    ['net_revenue_retention', /\\b(?:net revenue retention|nrr)\\b/],\n    ['gross_revenue_retention', /\\b(?:gross revenue retention|grr)\\b/],\n    ['expansion_mrr', /\\bexpansion mrr\\b/],\n    ['churned_mrr', /\\b(?:churned|churn) mrr\\b/],\n    ['current_mrr', /\\b(?:current mrr|monthly recurring revenue)\\b/],\n    ['current_arr', /\\b(?:current arr|annual recurring revenue)\\b/],\n    ['open_pipeline', /\\b(?:open pipeline|pipeline value|total pipeline)\\b/]\n  ];\n  const matches = patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n  if (matches.length === 0 && /\\bpipeline\\b/.test(q)) matches.push('open_pipeline');\n  return [...new Set(matches)];\n}\n\nfunction inferDimension(q) {\n  const patterns = [\n    ['sales_rep', /\\bby\\s+(?:sales\\s+rep|rep|owner)\\b/],\n    ['deal_stage', /\\bby\\s+(?:deal\\s+)?stage\\b/],\n    ['lead_source', /\\bby\\s+(?:lead\\s+)?source\\b/],\n    ['segment', /\\bby\\s+segment\\b/],\n    ['region', /\\bby\\s+(?:region|territory)\\b/],\n    ['industry', /\\bby\\s+industry\\b/],\n    ['campaign', /\\bby\\s+campaign\\b/],\n    ['forecast_category', /\\bby\\s+forecast category\\b/]\n  ];\n  return patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n}\n\nfunction inferPeriod(q) {\n  const patterns = [\n    ['last_quarter', /\\blast quarter\\b/], ['this_quarter', /\\bthis quarter\\b/],\n    ['last_month', /\\blast month\\b/], ['this_month', /\\bthis month\\b/],\n    ['last_week', /\\blast week\\b/], ['this_week', /\\bthis week\\b/],\n    ['last_year', /\\blast year\\b/], ['this_year', /\\bthis year\\b/],\n    ['yesterday', /\\byesterday\\b/], ['today', /\\btoday\\b/]\n  ];\n  return patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n}\n\nlet intent = null;\nlet interpreterType = null;\n\nif (body.structured_intent && typeof body.structured_intent === 'object' && !Array.isArray(body.structured_intent)) {\n  interpreterType = 'structured_intent_v2';\n  const supplied = body.structured_intent;\n  const kpiKey = typeof supplied.kpi_key === 'string' ? supplied.kpi_key.trim() : '';\n  const periodKey = typeof supplied.period_key === 'string' ? supplied.period_key.trim() : '';\n  let mode = typeof supplied.mode === 'string' ? supplied.mode.trim() : 'metric_report';\n  const dimensions = normalizeDimensions(supplied.dimensions);\n  if (!allowedKpis.has(kpiKey)) {\n    clarifications.push({code:'KPI_CLARIFICATION_REQUIRED', question:'Please choose a KPI from the approved Revenue Question Pack.'});\n  }\n  if (!allowedPeriods.has(periodKey)) {\n    clarifications.push({code:'PERIOD_CLARIFICATION_REQUIRED', question:'Which reporting period should I use (for example this month, last month, this quarter, or last quarter)?'});\n  }\n  if (!allowedModes.has(mode)) {\n    clarifications.push({code:'REPORT_MODE_CLARIFICATION_REQUIRED', question:'Should this be a metric, comparison, trend, breakdown, or pipeline diagnostic report?'});\n  }\n  if (dimensions.length === 1 && mode === 'metric_report') mode = 'breakdown_report';\n  if (mode === 'breakdown_report' && dimensions.length !== 1) {\n    clarifications.push({code:'BREAKDOWN_DIMENSION_REQUIRED', question:'Which single breakdown should I use: sales rep, stage, source, segment, region, industry, campaign, or forecast category?'});\n  }\n  if (mode === 'diagnostic_report' && kpiKey !== 'open_pipeline') {\n    clarifications.push({code:'DIAGNOSTIC_KPI_NOT_SUPPORTED', question:'Pipeline diagnostics currently support open pipeline. Please ask why open pipeline changed.'});\n  }\n\n  intent = {\n    kpi_key: kpiKey,\n    period_key: periodKey,\n    mode,\n    dimensions,\n    filters: normalizeFilters(supplied.filters)\n  };\n} else {\n  interpreterType = 'deterministic_nl_v2';\n  const question = typeof body.question === 'string' ? body.question.trim() : '';\n  if (!question || question.length > 1000) {\n    errors.push({code:'QUESTION_REQUIRED', message:'A report question of at most 1000 characters is required.'});\n  }\n\n  const q = question.toLowerCase().replace(/\\s+/g, ' ');\n  const metricMatches = inferMetric(q);\n  const periodMatches = inferPeriod(q);\n  const dimensions = inferDimension(q);\n\n  if (metricMatches.length !== 1) {\n    clarifications.push({code:'KPI_CLARIFICATION_REQUIRED', question:'I could not identify exactly one approved Revenue KPI. Please specify the metric you want.'});\n  }\n  if (periodMatches.length !== 1) {\n    clarifications.push({code:'PERIOD_CLARIFICATION_REQUIRED', question:'Which reporting period should I use (for example this month, last month, this quarter, or last quarter)?'});\n  }\n  if (dimensions.length > 1) {\n    clarifications.push({code:'MULTI_DIMENSION_NOT_SUPPORTED', question:'Please request one breakdown dimension at a time.'});\n  }\n\n  let mode = 'metric_report';\n  if (/\\bwhy\\b/.test(q) && (metricMatches[0] === 'open_pipeline' || /\\bpipeline\\b/.test(q))) {\n    mode = 'diagnostic_report';\n  } else if (dimensions.length === 1) {\n    mode = 'breakdown_report';\n  } else if (/\\b(compare|comparison|compared|versus|vs\\.?)\\b/.test(q)) {\n    mode = 'comparison_report';\n  } else if (/\\b(trend|change|changing|movement|moving)\\b/.test(q)) {\n    mode = 'trend_report';\n  }\n\n  intent = {\n    kpi_key: metricMatches.length === 1 ? metricMatches[0] : null,\n    period_key: periodMatches.length === 1 ? periodMatches[0] : null,\n    mode,\n    dimensions,\n    filters: {}\n  };\n}\n\nreturn {\n  request_id: requestId,\n  correlation_id: correlationId,\n  principal_key: principalKey,\n  authentication_source: authenticationSource,\n  question: typeof body.question === 'string' ? body.question.trim() : null,\n  interpreter_type: interpreterType,\n  structured_intent: intent,\n  validation: {\n    is_valid: errors.length === 0,\n    errors,\n    clarification_required: clarifications.length > 0,\n    clarifications,\n    validated_at: now.toISOString()\n  },\n  should_execute: errors.length === 0 && clarifications.length === 0,\n  workflow_stage: errors.length === 0 && clarifications.length === 0 ? 'agent_intent_ready' : 'agent_clarification_required'\n};"
+          "jsCode": "const raw = $json;\nconst body = raw.body && typeof raw.body === 'object' && !Array.isArray(raw.body) ? raw.body : raw;\nconst authSource = String(raw.__revint_auth_source ?? '').trim();\nconst authenticationSource = ['sso','service'].includes(authSource) ? authSource : 'unknown';\nconst now = new Date();\nconst suffix = Math.random().toString(36).slice(2, 10).toUpperCase();\nconst requestId = 'AGENT-' + now.getTime() + '-' + suffix;\nconst correlationId = 'CORR-' + now.getTime() + '-' + suffix;\nconst errors = [];\nconst clarifications = [];\nif (raw.__revint_security_error) {\n  errors.push({code:String(raw.__revint_security_error), message:'Request rejected by the Agent security gateway.'});\n}\n\nconst principalKey = typeof body.principal_key === 'string' ? body.principal_key.trim() : '';\nif (!principalKey || principalKey.length > 128) {\n  errors.push({code:'PRINCIPAL_KEY_REQUIRED', message:'A valid principal_key is required.'});\n}\n\nconst allowedKpis = new Set([\n  'closed_won_revenue','open_pipeline','closed_won_deals','win_rate',\n  'open_deals_count','weighted_pipeline','pipeline_coverage_ratio',\n  'stale_open_deals_count','stale_pipeline_value','missing_close_date_deals',\n  'average_deal_size','closed_lost_deals','loss_rate','average_acv',\n  'average_discount_percent','commit_forecast','best_case_forecast',\n  'forecast_accuracy','average_sales_cycle_days','average_stage_age_days',\n  'pipeline_velocity','quota_attainment','speed_to_lead_hours',\n  'follow_up_sla_compliance','overdue_followups','crm_data_quality_score',\n  'missing_owner_deals','lead_to_mql_rate','mql_to_sql_rate',\n  'sql_to_opportunity_rate','opportunity_to_won_rate','current_mrr',\n  'current_arr','expansion_mrr','churned_mrr','net_revenue_retention',\n  'gross_revenue_retention'\n]);\nconst allowedPeriods = new Set([\n  'today','yesterday','this_week','last_week','this_month','last_month',\n  'this_quarter','last_quarter','this_year','last_year'\n]);\nconst allowedModes = new Set([\n  'metric_report','trend_report','comparison_report','breakdown_report','diagnostic_report'\n]);\nconst allowedDimensions = new Set([\n  'sales_rep','deal_stage','lead_source','segment','region','industry','campaign','forecast_category'\n]);\nconst allowedFilterFields = new Set([\n  'sales_rep','deal_stage','lead_source','segment','region','industry','campaign','forecast_category'\n]);\n\nfunction normalizeFilters(input) {\n  if (input === undefined || input === null) return {};\n  if (typeof input !== 'object' || Array.isArray(input)) {\n    errors.push({code:'FILTERS_INVALID', message:'filters must be an object.'});\n    return {};\n  }\n  const output = {};\n  for (const [field, rawValue] of Object.entries(input)) {\n    if (!allowedFilterFields.has(field)) {\n      errors.push({code:'FILTER_FIELD_NOT_SUPPORTED', message:'Unsupported filter field: ' + field});\n      continue;\n    }\n    const values = Array.isArray(rawValue) ? rawValue : [rawValue];\n    if (\n      values.length === 0 || values.length > 50 ||\n      values.some(v => typeof v !== 'string' || !v.trim() || v.trim().length > 200)\n    ) {\n      errors.push({code:'FILTER_VALUE_INVALID', message:'Invalid filter value for ' + field + '.'});\n      continue;\n    }\n    output[field] = [...new Set(values.map(v => v.trim()))];\n  }\n  return output;\n}\n\nfunction normalizeDimensions(input) {\n  if (input === undefined || input === null) return [];\n  if (!Array.isArray(input)) {\n    errors.push({code:'DIMENSIONS_INVALID', message:'dimensions must be an array.'});\n    return [];\n  }\n  const values = [...new Set(input.map(v => typeof v === 'string' ? v.trim() : ''))].filter(Boolean);\n  if (values.length > 1) {\n    clarifications.push({code:'MULTI_DIMENSION_NOT_SUPPORTED', question:'Please request one breakdown dimension at a time.'});\n  }\n  for (const value of values) {\n    if (!allowedDimensions.has(value)) {\n      errors.push({code:'DIMENSION_NOT_SUPPORTED', message:'Unsupported dimension: ' + value});\n    }\n  }\n  return values;\n}\nfunction inferMetric(q) {\n  const patterns = [\n    ['pipeline_coverage_ratio', /\\bpipeline coverage(?: ratio)?\\b/],\n    ['pipeline_velocity', /\\bpipeline velocity\\b/],\n    ['weighted_pipeline', /\\bweighted pipeline\\b/],\n    ['stale_pipeline_value', /\\bstale pipeline(?: value| amount)?\\b/],\n    ['stale_open_deals_count', /\\b(?:stale open deals?|stale deals? count|number of stale deals?)\\b/],\n    ['open_deals_count', /\\b(?:open deals? count|number of open deals?|how many open deals?)\\b/],\n    ['missing_close_date_deals', /\\b(?:missing close date deals?|deals? (?:with )?missing close dates?)\\b/],\n    ['closed_won_revenue', /\\b(?:closed[\\s-]*won revenue|won revenue|revenue won)\\b/],\n    ['closed_won_deals', /\\b(?:closed[\\s-]*won deals?|won deals? count|number of won deals?|deals? won)\\b/],\n    ['closed_lost_deals', /\\b(?:closed[\\s-]*lost deals?|lost deals? count|number of lost deals?)\\b/],\n    ['average_deal_size', /\\b(?:average|avg) deal size\\b/],\n    ['average_discount_percent', /\\b(?:average|avg) discount(?: percent| percentage)?\\b/],\n    ['average_acv', /\\b(?:average|avg) acv\\b/],\n    ['win_rate', /\\bwin rate\\b/],\n    ['loss_rate', /\\bloss rate\\b/],\n    ['commit_forecast', /\\bcommit forecast\\b/],\n    ['best_case_forecast', /\\bbest[\\s-]*case forecast\\b/],\n    ['forecast_accuracy', /\\bforecast accuracy\\b/],\n    ['average_sales_cycle_days', /\\b(?:average|avg)?\\s*sales cycle(?: days?)?\\b/],\n    ['average_stage_age_days', /\\b(?:average|avg)?\\s*stage age(?: days?)?\\b/],\n    ['quota_attainment', /\\bquota attainment\\b/],\n    ['speed_to_lead_hours', /\\bspeed[\\s-]*to[\\s-]*lead\\b/],\n    ['follow_up_sla_compliance', /\\b(?:follow[\\s-]*up )?sla compliance\\b/],\n    ['overdue_followups', /\\boverdue follow[\\s-]*ups?\\b/],\n    ['crm_data_quality_score', /\\b(?:crm )?data quality(?: score)?\\b/],\n    ['missing_owner_deals', /\\b(?:missing owner deals?|deals? (?:with )?missing owners?|unowned deals?)\\b/],\n    ['lead_to_mql_rate', /\\b(?:lead[\\s-]*to[\\s-]*mql|lead \u2192 mql)(?: conversion| rate)?\\b/],\n    ['mql_to_sql_rate', /\\b(?:mql[\\s-]*to[\\s-]*sql|mql \u2192 sql)(?: conversion| rate)?\\b/],\n    ['sql_to_opportunity_rate', /\\b(?:sql[\\s-]*to[\\s-]*opportunity|sql \u2192 opportunity)(?: conversion| rate)?\\b/],\n    ['opportunity_to_won_rate', /\\b(?:opportunity[\\s-]*to[\\s-]*(?:won|closed won)|opportunity \u2192 (?:won|closed won))(?: conversion| rate)?\\b/],\n    ['net_revenue_retention', /\\b(?:net revenue retention|nrr)\\b/],\n    ['gross_revenue_retention', /\\b(?:gross revenue retention|grr)\\b/],\n    ['expansion_mrr', /\\bexpansion mrr\\b/],\n    ['churned_mrr', /\\b(?:churned|churn) mrr\\b/],\n    ['current_mrr', /\\b(?:current mrr|monthly recurring revenue)\\b/],\n    ['current_arr', /\\b(?:current arr|annual recurring revenue)\\b/],\n    ['open_pipeline', /\\b(?:open pipeline|pipeline value|total pipeline)\\b/]\n  ];\n  const matches = patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n  if (matches.length === 0 && /\\bpipeline\\b/.test(q)) matches.push('open_pipeline');\n  return [...new Set(matches)];\n}\n\nfunction inferDimension(q) {\n  const patterns = [\n    ['sales_rep', /\\bby\\s+(?:sales\\s+rep|rep|owner)\\b/],\n    ['deal_stage', /\\bby\\s+(?:deal\\s+)?stage\\b/],\n    ['lead_source', /\\bby\\s+(?:lead\\s+)?source\\b/],\n    ['segment', /\\bby\\s+segment\\b/],\n    ['region', /\\bby\\s+(?:region|territory)\\b/],\n    ['industry', /\\bby\\s+industry\\b/],\n    ['campaign', /\\bby\\s+campaign\\b/],\n    ['forecast_category', /\\bby\\s+forecast category\\b/]\n  ];\n  return patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n}\n\nfunction inferPeriod(q) {\n  const patterns = [\n    ['last_quarter', /\\blast quarter\\b/], ['this_quarter', /\\bthis quarter\\b/],\n    ['last_month', /\\blast month\\b/], ['this_month', /\\bthis month\\b/],\n    ['last_week', /\\blast week\\b/], ['this_week', /\\bthis week\\b/],\n    ['last_year', /\\blast year\\b/], ['this_year', /\\bthis year\\b/],\n    ['yesterday', /\\byesterday\\b/], ['today', /\\btoday\\b/]\n  ];\n  return patterns.filter(([,rx]) => rx.test(q)).map(([key]) => key);\n}\n\nlet intent = null;\nlet interpreterType = null;\n\nif (body.structured_intent && typeof body.structured_intent === 'object' && !Array.isArray(body.structured_intent)) {\n  interpreterType = raw.ai_adapter?.action === 'intent' && raw.ai_adapter?.status === 'applied' ? 'groq_structured_intent_v2' : 'structured_intent_v2';\n  const supplied = body.structured_intent;\n  const kpiKey = typeof supplied.kpi_key === 'string' ? supplied.kpi_key.trim() : '';\n  const periodKey = typeof supplied.period_key === 'string' ? supplied.period_key.trim() : '';\n  let mode = typeof supplied.mode === 'string' ? supplied.mode.trim() : 'metric_report';\n  const dimensions = normalizeDimensions(supplied.dimensions);\n  if (!allowedKpis.has(kpiKey)) {\n    clarifications.push({code:'KPI_CLARIFICATION_REQUIRED', question:'Please choose a KPI from the approved Revenue Question Pack.'});\n  }\n  if (!allowedPeriods.has(periodKey)) {\n    clarifications.push({code:'PERIOD_CLARIFICATION_REQUIRED', question:'Which reporting period should I use (for example this month, last month, this quarter, or last quarter)?'});\n  }\n  if (!allowedModes.has(mode)) {\n    clarifications.push({code:'REPORT_MODE_CLARIFICATION_REQUIRED', question:'Should this be a metric, comparison, trend, breakdown, or pipeline diagnostic report?'});\n  }\n  if (dimensions.length === 1 && mode === 'metric_report') mode = 'breakdown_report';\n  if (mode === 'breakdown_report' && dimensions.length !== 1) {\n    clarifications.push({code:'BREAKDOWN_DIMENSION_REQUIRED', question:'Which single breakdown should I use: sales rep, stage, source, segment, region, industry, campaign, or forecast category?'});\n  }\n  if (mode === 'diagnostic_report' && kpiKey !== 'open_pipeline') {\n    clarifications.push({code:'DIAGNOSTIC_KPI_NOT_SUPPORTED', question:'Pipeline diagnostics currently support open pipeline. Please ask why open pipeline changed.'});\n  }\n\n  intent = {\n    kpi_key: kpiKey,\n    period_key: periodKey,\n    mode,\n    dimensions,\n    filters: normalizeFilters(supplied.filters)\n  };\n} else {\n  interpreterType = 'deterministic_nl_v2';\n  const question = typeof body.question === 'string' ? body.question.trim() : '';\n  if (!question || question.length > 1000) {\n    errors.push({code:'QUESTION_REQUIRED', message:'A report question of at most 1000 characters is required.'});\n  }\n\n  const q = question.toLowerCase().replace(/\\s+/g, ' ');\n  const metricMatches = inferMetric(q);\n  const periodMatches = inferPeriod(q);\n  const dimensions = inferDimension(q);\n\n  if (metricMatches.length !== 1) {\n    clarifications.push({code:'KPI_CLARIFICATION_REQUIRED', question:'I could not identify exactly one approved Revenue KPI. Please specify the metric you want.'});\n  }\n  if (periodMatches.length !== 1) {\n    clarifications.push({code:'PERIOD_CLARIFICATION_REQUIRED', question:'Which reporting period should I use (for example this month, last month, this quarter, or last quarter)?'});\n  }\n  if (dimensions.length > 1) {\n    clarifications.push({code:'MULTI_DIMENSION_NOT_SUPPORTED', question:'Please request one breakdown dimension at a time.'});\n  }\n\n  let mode = 'metric_report';\n  if (/\\bwhy\\b/.test(q) && (metricMatches[0] === 'open_pipeline' || /\\bpipeline\\b/.test(q))) {\n    mode = 'diagnostic_report';\n  } else if (dimensions.length === 1) {\n    mode = 'breakdown_report';\n  } else if (/\\b(compare|comparison|compared|versus|vs\\.?)\\b/.test(q)) {\n    mode = 'comparison_report';\n  } else if (/\\b(trend|change|changing|movement|moving)\\b/.test(q)) {\n    mode = 'trend_report';\n  }\n\n  intent = {\n    kpi_key: metricMatches.length === 1 ? metricMatches[0] : null,\n    period_key: periodMatches.length === 1 ? periodMatches[0] : null,\n    mode,\n    dimensions,\n    filters: {}\n  };\n}\n\nreturn {\n  request_id: requestId,\n  correlation_id: correlationId,\n  principal_key: principalKey,\n  authentication_source: authenticationSource,\n  question: typeof body.question === 'string' ? body.question.trim() : null,\n  interpreter_type: interpreterType,\n  ai_adapter: raw.ai_adapter ?? null,\n  structured_intent: intent,\n  validation: {\n    is_valid: errors.length === 0,\n    errors,\n    clarification_required: clarifications.length > 0,\n    clarifications,\n    validated_at: now.toISOString()\n  },\n  should_execute: errors.length === 0 && clarifications.length === 0,\n  workflow_stage: errors.length === 0 && clarifications.length === 0 ? 'agent_intent_ready' : 'agent_clarification_required'\n};"
         },
         "id": "5380b2f4-6a6e-4201-9b25-c1a15401cedc",
         "name": "CTX | Interpret Report Request",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          260,
+          1560,
           0
         ],
         "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nCTX | Interpret Report Request\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nContext / Interpretation\n\nPURPOSE\nInterprets natural-language or structured reporting intent into the 37-KPI Revenue Question Pack, period, mode, one approved breakdown dimension, and approved filters.\n\nUPSTREAM / INPUT\nINT | Authenticated Report Request, CTX | Bind SSO Principal\n\nDOWNSTREAM / OUTPUT\nVAL | Intent Ready?\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nPrepares bounded context; it cannot authorize arbitrary database execution.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
@@ -73,7 +73,7 @@
         "type": "n8n-nodes-base.if",
         "typeVersion": 2.3,
         "position": [
-          520,
+          1820,
           0
         ],
         "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nVAL | Intent Ready?\n\nNODE TYPE\nn8n-nodes-base.if v2.3\n\nLAYER\nValidation / Guardrail\n\nPURPOSE\nApplies deterministic validation/routing for Intent Ready?.\n\nUPSTREAM / INPUT\nCTX | Interpret Report Request\n\nDOWNSTREAM / OUTPUT\nDB | Execute Governed Metric, REP | Build Clarification Response\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nFail-closed deterministic control; invalid or unsupported work must not continue.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
@@ -91,7 +91,7 @@
         "type": "n8n-nodes-base.postgres",
         "typeVersion": 2.7,
         "position": [
-          780,
+          2080,
           -120
         ],
         "credentials": {
@@ -107,14 +107,14 @@
       },
       {
         "parameters": {
-          "jsCode": "const ctx = $('CTX | Interpret Report Request').item.json;\nlet result = $json.agent_result;\nif (typeof result === 'string') {\n  try { result = JSON.parse(result); } catch { result = null; }\n}\n\nif (!result || result.status !== 'approved') {\n  const internalReason = result?.reason ?? 'REPORT_NOT_AUTHORIZED';\n  const circuitOpen = internalReason === 'CIRCUIT_OPEN';\n  const unavailable = result?.status === 'unavailable';\n  const httpStatus = circuitOpen ? 503 : (unavailable ? 422 : 403);\n  const publicCode = circuitOpen\n    ? 'SERVICE_TEMPORARILY_UNAVAILABLE'\n    : (unavailable ? 'REPORT_DATA_NOT_AVAILABLE' : 'REPORT_NOT_AUTHORIZED');\n  const publicMessage = circuitOpen\n    ? 'The reporting service is temporarily unavailable. Please retry after the circuit recovery window.'\n    : (unavailable\n        ? 'The requested metric is supported, but the required governed client data is not currently available or complete.'\n        : 'The requested report could not be authorized for execution.');\n\n  return {\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    http_status: httpStatus,\n    response_body: {\n      status: unavailable ? 'unavailable' : 'rejected',\n      request_id: ctx.request_id,\n      correlation_id: ctx.correlation_id,\n      error: {\n        code: publicCode,\n        message: publicMessage,\n        reason: unavailable ? internalReason : undefined,\n        missing_domains: unavailable ? (result?.missing_domains ?? undefined) : undefined,\n        retry_after: circuitOpen ? (result?.retry_after ?? null) : undefined\n      }\n    },\n    audit_event: {\n      event_type: unavailable ? 'report_data_unavailable' : 'report_rejected',\n      stage: 'agent_core',\n      actor: 'n8n_agent_core',\n      payload: {\n        principal_key: ctx.principal_key,\n        authentication_source: ctx.authentication_source,\n        kpi_key: ctx.structured_intent?.kpi_key ?? null,\n        period_key: ctx.structured_intent?.period_key ?? null,\n        mode: ctx.structured_intent?.mode ?? null,\n        dimensions: ctx.structured_intent?.dimensions ?? [],\n        reason: internalReason,\n        interpreter_type: ctx.interpreter_type\n      }\n    }\n  };\n}\n\nreturn {\n  request_id: ctx.request_id,\n  correlation_id: ctx.correlation_id,\n  http_status: 200,\n  response_body: {\n    status: 'success',\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    report: {\n      report_type: result.report_type,\n      kpi_key: result.kpi_key,\n      mode: result.mode,\n      dimensions: result.dimensions ?? [],\n      unit: result.unit,\n      currency_code: result.currency_code,\n      reporting_timezone: result.reporting_timezone,\n      current_period: result.current_period,\n      previous_period: result.previous_period,\n      analysis: result.analysis,\n      diagnostics: result.diagnostics\n    }\n  },\n  audit_event: {\n    event_type: 'report_completed',\n    stage: 'agent_core',\n    actor: 'n8n_agent_core',\n    payload: {\n      principal_key: ctx.principal_key,\n      authentication_source: ctx.authentication_source,\n      kpi_key: result.kpi_key,\n      period_key: ctx.structured_intent?.period_key ?? null,\n      mode: result.mode,\n      dimensions: result.dimensions ?? [],\n      data_scope: result.data_scope,\n      interpreter_type: ctx.interpreter_type,\n      status: 'approved'\n    }\n  }\n};"
+          "jsCode": "const ctx = $('CTX | Interpret Report Request').item.json;\nlet result = $json.agent_result;\nconst managementSummary = $json.management_summary ?? null;\nconst summaryStatus = $json.ai_adapter?.action === 'summary' ? ($json.ai_adapter?.status ?? null) : null;\nif (typeof result === 'string') {\n  try { result = JSON.parse(result); } catch { result = null; }\n}\n\nif (!result || result.status !== 'approved') {\n  const internalReason = result?.reason ?? 'REPORT_NOT_AUTHORIZED';\n  const circuitOpen = internalReason === 'CIRCUIT_OPEN';\n  const unavailable = result?.status === 'unavailable';\n  const httpStatus = circuitOpen ? 503 : (unavailable ? 422 : 403);\n  const publicCode = circuitOpen\n    ? 'SERVICE_TEMPORARILY_UNAVAILABLE'\n    : (unavailable ? 'REPORT_DATA_NOT_AVAILABLE' : 'REPORT_NOT_AUTHORIZED');\n  const publicMessage = circuitOpen\n    ? 'The reporting service is temporarily unavailable. Please retry after the circuit recovery window.'\n    : (unavailable\n        ? 'The requested metric is supported, but the required governed client data is not currently available or complete.'\n        : 'The requested report could not be authorized for execution.');\n\n  return {\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    http_status: httpStatus,\n    response_body: {\n      status: unavailable ? 'unavailable' : 'rejected',\n      request_id: ctx.request_id,\n      correlation_id: ctx.correlation_id,\n      error: {\n        code: publicCode,\n        message: publicMessage,\n        reason: unavailable ? internalReason : undefined,\n        missing_domains: unavailable ? (result?.missing_domains ?? undefined) : undefined,\n        retry_after: circuitOpen ? (result?.retry_after ?? null) : undefined\n      }\n    },\n    audit_event: {\n      event_type: unavailable ? 'report_data_unavailable' : 'report_rejected',\n      stage: 'agent_core',\n      actor: 'n8n_agent_core',\n      payload: {\n        principal_key: ctx.principal_key,\n        authentication_source: ctx.authentication_source,\n        kpi_key: ctx.structured_intent?.kpi_key ?? null,\n        period_key: ctx.structured_intent?.period_key ?? null,\n        mode: ctx.structured_intent?.mode ?? null,\n        dimensions: ctx.structured_intent?.dimensions ?? [],\n        reason: internalReason,\n        interpreter_type: ctx.interpreter_type\n      }\n    }\n  };\n}\n\nreturn {\n  request_id: ctx.request_id,\n  correlation_id: ctx.correlation_id,\n  http_status: 200,\n  response_body: {\n    status: 'success',\n    request_id: ctx.request_id,\n    correlation_id: ctx.correlation_id,\n    report: {\n      report_type: result.report_type,\n      kpi_key: result.kpi_key,\n      mode: result.mode,\n      dimensions: result.dimensions ?? [],\n      unit: result.unit,\n      currency_code: result.currency_code,\n      reporting_timezone: result.reporting_timezone,\n      current_period: result.current_period,\n      previous_period: result.previous_period,\n      analysis: result.analysis,\n      diagnostics: result.diagnostics\n    },\n    management_summary: managementSummary\n  },\n  audit_event: {\n    event_type: 'report_completed',\n    stage: 'agent_core',\n    actor: 'n8n_agent_core',\n    payload: {\n      principal_key: ctx.principal_key,\n      authentication_source: ctx.authentication_source,\n      kpi_key: result.kpi_key,\n      period_key: ctx.structured_intent?.period_key ?? null,\n      mode: result.mode,\n      dimensions: result.dimensions ?? [],\n      data_scope: result.data_scope,\n      interpreter_type: ctx.interpreter_type,\n      intent_adapter_status: ctx.ai_adapter?.status ?? null,\n      management_summary_status: summaryStatus,\n      status: 'approved'\n    }\n  }\n};"
         },
         "id": "df64a15a-1ebf-4219-bbfe-e25395244cea",
         "name": "REP | Build Report Response",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          1040,
+          2860,
           -120
         ],
         "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nREP | Build Report Response\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nResponse / Presentation\n\nPURPOSE\nBuilds bounded scalar, breakdown, diagnostic, unavailable-data, or authorization responses from governed V2 results.\n\nUPSTREAM / INPUT\nDB | Execute Governed Metric\n\nDOWNSTREAM / OUTPUT\nAUD | Log Report Result\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nBuilds bounded output only from previously governed facts.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
@@ -132,7 +132,7 @@
         "type": "n8n-nodes-base.postgres",
         "typeVersion": 2.7,
         "position": [
-          1300,
+          3380,
           -120
         ],
         "alwaysOutputData": true,
@@ -150,9 +150,9 @@
       {
         "parameters": {
           "respondWith": "json",
-          "responseBody": "={{ $('REP | Build Report Response').item.json.response_body }}",
+          "responseBody": "={{ $('REP | Build Presentation Artifact').item.json.response_body }}",
           "options": {
-            "responseCode": "={{ $('REP | Build Report Response').item.json.http_status }}"
+            "responseCode": "={{ $('REP | Build Presentation Artifact').item.json.http_status }}"
           }
         },
         "id": "01ce8ff2-d9d1-49e0-ac50-4f9395e9c8a1",
@@ -160,7 +160,7 @@
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.5,
         "position": [
-          1560,
+          3640,
           -120
         ],
         "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nDEL | Return Report Response\n\nNODE TYPE\nn8n-nodes-base.respondToWebhook v1.5\n\nLAYER\nDelivery\n\nPURPOSE\nReturns the approved delivery contract for Return Report Response.\n\nUPSTREAM / INPUT\nAUD | Log Report Result\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nReturns only approved response fields; no database authority is added here.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
@@ -174,8 +174,8 @@
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
         "position": [
-          780,
-          160
+          2080,
+          180
         ],
         "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nREP | Build Clarification Response\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nResponse / Presentation\n\nPURPOSE\nBuilds the bounded response/presentation contract for Build Clarification Response.\n\nUPSTREAM / INPUT\nVAL | Intent Ready?\n\nDOWNSTREAM / OUTPUT\nAUD | Log Clarification\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nBuilds bounded output only from previously governed facts.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
@@ -192,8 +192,8 @@
         "type": "n8n-nodes-base.postgres",
         "typeVersion": 2.7,
         "position": [
-          1040,
-          160
+          2340,
+          180
         ],
         "alwaysOutputData": true,
         "credentials": {
@@ -220,8 +220,8 @@
         "type": "n8n-nodes-base.respondToWebhook",
         "typeVersion": 1.5,
         "position": [
-          1300,
-          160
+          2600,
+          180
         ],
         "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nDEL | Return Clarification\n\nNODE TYPE\nn8n-nodes-base.respondToWebhook v1.5\n\nLAYER\nDelivery\n\nPURPOSE\nReturns the approved delivery contract for Return Clarification.\n\nUPSTREAM / INPUT\nAUD | Log Clarification\n\nDOWNSTREAM / OUTPUT\nTerminal / external boundary\n\nREUSABLE AGENT ROLE\nThis node is part of the reusable Agent V2 core or an explicit source-adapter boundary. Client credentials, mappings, identities, currency, timezone and business policy are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nReturns only approved response fields; no database authority is added here.\n\nDOCUMENTATION STATUS\nVerified Agent V2 node note \u2014 2026-09-28."
       },
@@ -311,7 +311,10 @@
             "name": "REVINT | Reporting RO"
           }
         },
-        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nDB | Resolve Report Service\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nSecurity / Identity Binding\n\nPURPOSE\nResolves the active machine-to-machine report service for the deployment tenant.\n\nUPSTREAM / INPUT\nINT | Authenticated Report Request\n\nDOWNSTREAM / OUTPUT\nCTX | Bind Report Service\n\nREUSABLE AGENT ROLE\nPrevents API callers from choosing their own principal after authenticating with the report-service credential.\n\nCONTROL BOUNDARY\nThe route maps to a fixed active service identity in the deployment tenant; caller JSON cannot select a different principal.\n\nDOCUMENTATION STATUS\nVerified Agent V2 security node note \u2014 2026-09-29."
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nDB | Resolve Report Service\n\nNODE TYPE\nn8n-nodes-base.postgres v2.7\n\nLAYER\nSecurity / Identity Binding\n\nPURPOSE\nResolves the active machine-to-machine report service for the deployment tenant.\n\nUPSTREAM / INPUT\nINT | Authenticated Report Request\n\nDOWNSTREAM / OUTPUT\nCTX | Bind Report Service\n\nREUSABLE AGENT ROLE\nPrevents API callers from choosing their own principal after authenticating with the report-service credential.\n\nCONTROL BOUNDARY\nThe route maps to a fixed active service identity in the deployment tenant; caller JSON cannot select a different principal.\n\nDOCUMENTATION STATUS\nVerified Agent V2 security node note \u2014 2026-09-29.",
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000
       },
       {
         "parameters": {
@@ -326,6 +329,138 @@
           -360
         ],
         "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nCTX | Bind Report Service\n\nNODE TYPE\nn8n-nodes-base.code v2\n\nLAYER\nSecurity / Identity Binding\n\nPURPOSE\nOverwrites any caller-supplied principal with the deployment's authenticated service principal and enforces the service body-size budget.\n\nUPSTREAM / INPUT\nDB | Resolve Report Service\n\nDOWNSTREAM / OUTPUT\nCTX | Interpret Report Request\n\nREUSABLE AGENT ROLE\nProvides reusable machine-to-machine identity binding before Agent interpretation.\n\nCONTROL BOUNDARY\nCaller-controlled principal identity is discarded; unmapped services and oversized bodies fail closed.\n\nDOCUMENTATION STATUS\nVerified Agent V2 security node note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "return {\n  ...$json,\n  ai_action:'intent',\n  ai_adapter_request_at:new Date().toISOString()\n};"
+        },
+        "id": "e7c378d4-de88-5d6f-afff-5de6246d6626",
+        "name": "CTX | Prepare AI Intent Request",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          780,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nCTX | Prepare AI Intent Request\n\nLAYER\nContext\n\nPURPOSE\nPrepares the already-authenticated request for the optional internal intelligence adapter.\n\nREUSABLE AGENT ROLE\nMigrated from the useful intelligence/presentation concepts of the earlier REVINT-01 workflow without restoring duplicated V1 authorization or database logic.\n\nCONTROL BOUNDARY\nSecurity errors and server-bound principal identity remain attached and are never replaced by the model.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "REVINTV2AIADAPTER01",
+            "mode": "id",
+            "cachedResultName": "REVINT-V2-AI-01 | Governed Intelligence Adapter"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {},
+            "matchingColumns": [],
+            "schema": [],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "id": "609cae9b-a78c-5824-9a4c-fb74efeac3ed",
+        "name": "AI | Run Governed Intent Adapter",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          1040,
+          0
+        ],
+        "onError": "continueRegularOutput",
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nAI | Run Governed Intent Adapter\n\nLAYER\nAI Adapter\n\nPURPOSE\nCalls the internal optional Groq intent adapter and waits for its bounded structured output.\n\nREUSABLE AGENT ROLE\nMigrated from the useful intelligence/presentation concepts of the earlier REVINT-01 workflow without restoring duplicated V1 authorization or database logic.\n\nCONTROL BOUNDARY\nOn provider/sub-workflow failure, execution continues to the deterministic fallback instead of failing the report.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const original = $('CTX | Prepare AI Intent Request').item.json;\nconst candidate = $json ?? {};\nconst validEnvelope = candidate.body && typeof candidate.body === 'object' && !Array.isArray(candidate.body);\nif (validEnvelope) return candidate;\nreturn {\n  ...original,\n  ai_adapter:{\n    action:'intent',status:'provider_error_fallback',provider:null,model:null,\n    applied_at:new Date().toISOString()\n  }\n};"
+        },
+        "id": "c9f3b5d8-c1af-52a8-a032-413a27c6d30f",
+        "name": "CTX | Recover Intent Adapter Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nCTX | Recover Intent Adapter Result\n\nLAYER\nResilience\n\nPURPOSE\nUses adapter output when valid and restores the authenticated pre-AI request when the provider/sub-workflow fails.\n\nREUSABLE AGENT ROLE\nMigrated from the useful intelligence/presentation concepts of the earlier REVINT-01 workflow without restoring duplicated V1 authorization or database logic.\n\nCONTROL BOUNDARY\nThe deterministic interpreter always remains available as a safe fallback.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "let result=$json.agent_result;\nif (typeof result === 'string') {\n  try { result=JSON.parse(result); } catch { result=null; }\n}\nconst ctx=$('CTX | Interpret Report Request').item.json;\nconst approved=result?.status === 'approved';\nreturn {\n  ...$json,\n  agent_result:result,\n  ai_action:'summary',\n  management_summary_input: approved ? {\n    manager_question:ctx.question,\n    structured_intent:ctx.structured_intent,\n    report:{\n      report_type:result.report_type,\n      kpi_key:result.kpi_key,\n      mode:result.mode,\n      dimensions:result.dimensions ?? [],\n      unit:result.unit,\n      currency_code:result.currency_code,\n      reporting_timezone:result.reporting_timezone,\n      current_period:result.current_period,\n      previous_period:result.previous_period,\n      analysis:result.analysis,\n      diagnostics:result.diagnostics\n    }\n  } : null\n};"
+        },
+        "id": "fbb608bb-eae2-50f8-b127-85b94313b4a1",
+        "name": "CTX | Prepare Management Summary Input",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2080,
+          -120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nCTX | Prepare Management Summary Input\n\nLAYER\nContext\n\nPURPOSE\nBuilds a bounded management-summary input from already governed report facts only.\n\nREUSABLE AGENT ROLE\nMigrated from the useful intelligence/presentation concepts of the earlier REVINT-01 workflow without restoring duplicated V1 authorization or database logic.\n\nCONTROL BOUNDARY\nRejected/unavailable reports are never sent to the management-summary model.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "REVINTV2AIADAPTER01",
+            "mode": "id",
+            "cachedResultName": "REVINT-V2-AI-01 | Governed Intelligence Adapter"
+          },
+          "workflowInputs": {
+            "mappingMode": "defineBelow",
+            "value": {},
+            "matchingColumns": [],
+            "schema": [],
+            "attemptToConvertTypes": false,
+            "convertFieldsToString": true
+          },
+          "options": {
+            "waitForSubWorkflow": true
+          }
+        },
+        "id": "b72d6ae8-d858-5bcf-83c1-208fc9e1dcbc",
+        "name": "AI | Run Management Summary Adapter",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.3,
+        "position": [
+          2340,
+          -120
+        ],
+        "onError": "continueRegularOutput",
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nAI | Run Management Summary Adapter\n\nLAYER\nAI Communication\n\nPURPOSE\nCalls the internal optional Groq summary adapter with governed facts.\n\nREUSABLE AGENT ROLE\nMigrated from the useful intelligence/presentation concepts of the earlier REVINT-01 workflow without restoring duplicated V1 authorization or database logic.\n\nCONTROL BOUNDARY\nProvider failure cannot change the report facts and falls back to a report without AI narrative.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const original=$('CTX | Prepare Management Summary Input').item.json;\nconst candidate=$json ?? {};\nif (candidate.agent_result !== undefined) return candidate;\nreturn {\n  ...original,\n  management_summary:null,\n  ai_adapter:{\n    action:'summary',status:'provider_error_fallback',provider:null,model:null,\n    applied_at:new Date().toISOString()\n  }\n};"
+        },
+        "id": "50c752cc-18d5-5554-b9c0-c56355fd958f",
+        "name": "CTX | Recover Management Summary",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2600,
+          -120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nCTX | Recover Management Summary\n\nLAYER\nResilience\n\nPURPOSE\nUses a valid management-summary result or restores the governed report when AI fails.\n\nREUSABLE AGENT ROLE\nMigrated from the useful intelligence/presentation concepts of the earlier REVINT-01 workflow without restoring duplicated V1 authorization or database logic.\n\nCONTROL BOUNDARY\nDeterministic metrics remain available even when the LLM provider is unavailable.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const data=$json;\nconst body=data.response_body && typeof data.response_body === 'object' ? {...data.response_body} : {};\nif (body.status !== 'success' || !body.report) return data;\nconst report=body.report;\nconst summary=body.management_summary ?? null;\nlet presentationType='kpi_card';\nif (report.mode === 'breakdown_report' || report.mode === 'diagnostic_report') presentationType='table';\nelse if (report.mode === 'trend_report' || report.mode === 'comparison_report') presentationType='chart';\n\nconst humanize=(v)=>String(v ?? '').replace(/_/g,' ').replace(/\\b\\w/g,c=>c.toUpperCase());\nlet payload=null;\nif (presentationType === 'kpi_card') {\n  payload={\n    value:report.current_period?.value ?? null,\n    unit:report.unit ?? null,\n    currency_code:report.currency_code ?? null,\n    period:report.current_period?.period_key ?? null\n  };\n} else if (presentationType === 'table') {\n  payload={\n    columns: report.mode === 'diagnostic_report' ? ['diagnostic'] : null,\n    rows: Array.isArray(report.current_period?.rows)\n      ? report.current_period.rows\n      : (report.diagnostics ? [{diagnostic:report.diagnostics}] : []),\n    row_count:Array.isArray(report.current_period?.rows)\n      ? report.current_period.rows.length\n      : (report.diagnostics ? 1 : 0)\n  };\n} else {\n  payload={\n    series:[\n      {period:report.current_period?.period_key ?? 'current',value:report.current_period?.value ?? null},\n      ...(report.previous_period ? [{period:report.previous_period.period_key ?? 'previous',value:report.previous_period.value ?? null}] : [])\n    ]\n  };\n}\nbody.presentation={\n  presentation_type:presentationType,\n  title:summary?.headline ?? humanize(report.kpi_key),\n  summary:summary?.summary ?? null,\n  key_facts:Array.isArray(summary?.key_facts) ? summary.key_facts : [],\n  data:payload,\n  generated_from:'governed_report_facts',\n  presentation_version:'2.0'\n};\nreturn {...data,response_body:body};"
+        },
+        "id": "12ee4bcc-00df-5fcf-bc82-63ba93be35b0",
+        "name": "REP | Build Presentation Artifact",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3120,
+          -120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-AGENT-01 | Governed Report Agent Core\n\nNODE\nREP | Build Presentation Artifact\n\nLAYER\nPresentation\n\nPURPOSE\nPorts the useful KPI-card/table/chart concept from REVINT-01 into a compact delivery-neutral V2 artifact.\n\nREUSABLE AGENT ROLE\nMigrated from the useful intelligence/presentation concepts of the earlier REVINT-01 workflow without restoring duplicated V1 authorization or database logic.\n\nCONTROL BOUNDARY\nPresentation never calculates or authorizes metrics; it renders only already governed facts.\n\nDOCUMENTATION STATUS\nAgent V2 migration note \u2014 2026-09-29."
       }
     ],
     "connections": {
@@ -373,7 +508,7 @@
         "main": [
           [
             {
-              "node": "REP | Build Report Response",
+              "node": "CTX | Prepare Management Summary Input",
               "type": "main",
               "index": 0
             }
@@ -384,7 +519,7 @@
         "main": [
           [
             {
-              "node": "AUD | Log Report Result",
+              "node": "REP | Build Presentation Artifact",
               "type": "main",
               "index": 0
             }
@@ -450,7 +585,7 @@
         "main": [
           [
             {
-              "node": "CTX | Interpret Report Request",
+              "node": "CTX | Prepare AI Intent Request",
               "type": "main",
               "index": 0
             }
@@ -472,7 +607,84 @@
         "main": [
           [
             {
+              "node": "CTX | Prepare AI Intent Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Prepare AI Intent Request": {
+        "main": [
+          [
+            {
+              "node": "AI | Run Governed Intent Adapter",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI | Run Governed Intent Adapter": {
+        "main": [
+          [
+            {
+              "node": "CTX | Recover Intent Adapter Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Recover Intent Adapter Result": {
+        "main": [
+          [
+            {
               "node": "CTX | Interpret Report Request",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Prepare Management Summary Input": {
+        "main": [
+          [
+            {
+              "node": "AI | Run Management Summary Adapter",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AI | Run Management Summary Adapter": {
+        "main": [
+          [
+            {
+              "node": "CTX | Recover Management Summary",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Recover Management Summary": {
+        "main": [
+          [
+            {
+              "node": "REP | Build Report Response",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Build Presentation Artifact": {
+        "main": [
+          [
+            {
+              "node": "AUD | Log Report Result",
               "type": "main",
               "index": 0
             }
