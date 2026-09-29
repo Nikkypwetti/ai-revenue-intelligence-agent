@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 AIR="$ROOT_DIR/workflows/runtime-templates/REVINT-V2-AIRTABLE-01.json"
 EMAIL="$ROOT_DIR/workflows/runtime-templates/REVINT-V2-EMAIL-01.json"
 ENV="$ROOT_DIR/deploy/.env.example"
+EMAIL_RELIABILITY="$ROOT_DIR/database/seeds/012_email_delivery_reliability.sql"
 
 python3 - "$AIR" "$EMAIL" <<'PY'
 import json,re,sys
@@ -65,6 +66,9 @@ grep -q 'REVINTAIRTABLE001' "$ROOT_DIR/scripts/deploy-airtable-connector.sh"
 grep -q "name='REVINT | Gmail Reports'" "$ROOT_DIR/scripts/deploy-email-delivery.sh"
 grep -q 'gmail_credential_id' "$ROOT_DIR/scripts/deploy-email-delivery.sh"
 grep -q 'tmp_workflow' "$ROOT_DIR/scripts/deploy-email-delivery.sh"
+grep -q "'email_delivery'" "$EMAIL_RELIABILITY"
+grep -q 'REVINTV2EMAIL01' "$EMAIL_RELIABILITY"
+grep -q '012_email_delivery_reliability.sql' "$ROOT_DIR/scripts/init-email-delivery.sh"
 grep -q 'CHANGE_ME_' "$ROOT_DIR/config/first-client.connectors.example.json"
 
 if bash "$ROOT_DIR/scripts/deploy-airtable-connector.sh" --confirm WRONG >/tmp/revint-air-guard.out 2>&1; then
