@@ -14,10 +14,10 @@ done
 
 docker compose -p "${COMPOSE_PROJECT_NAME:-revint-agent}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T reporting-db \
   psql -X -v ON_ERROR_STOP=1 -U "$REPORTING_DB_ADMIN_USER" -d "$REPORTING_DB_NAME" \
-  < "$ROOT_DIR/database/migrations/017_incident_notifications.sql"
+  < "$ROOT_DIR/database/migrations/031_incident_notifications.sql"
 
 docker compose -p "${COMPOSE_PROJECT_NAME:-revint-agent}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE" exec -T reporting-db \
   psql -X -v ON_ERROR_STOP=1 -U "$REPORTING_DB_ADMIN_USER" -d "$REPORTING_DB_NAME" \
-  < "$ROOT_DIR/database/seeds/012_incident_notification_reliability.sql"
+  < "$ROOT_DIR/database/seeds/021_incident_notification_reliability.sql"
 
 echo "PASS: incident notification governance initialized safe-disabled."
