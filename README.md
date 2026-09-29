@@ -47,6 +47,14 @@ See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 doc
 
 > These stages are production-foundation work, not a claim of full production readiness. The governed LLM adapter is implemented but remains safe-disabled until a dedicated Agent V2 Groq credential is configured. Additional CRM/billing adapters (such as Salesforce/Airtable), external Slack/email delivery and incident notifications, encrypted off-site backup replication, activation on a real public domain with a trusted production certificate, and an end-to-end login against the client's real identity provider remain deployment work. The HubSpot connector is live-validated locally but each client deployment still requires its own read-only credential, mapping/configuration review, and isolated environment.
 
+## First real client implementation
+
+Agent V2 now includes a secret-free implementation pack for the owner's own HubSpot, Salesforce, and Airtable CRM stack. HubSpot has been reviewed against the live portal; the AsterNova Salesforce Opportunity stages are mapped into the canonical deal contract; Airtable is supported by the connector validator but remains fail-closed until its live field schema can be re-read after the API quota resets.
+
+See [First Client Implementation](docs/first-client-implementation.md) and [first-client connector mappings](config/first-client.connectors.example.json).
+
+A GitHub Actions static-verification workflow validates JSON, shell syntax, client connector policy, and secret-like committed file names on pull requests and pushes to main.
+
 ## Revenue Question Pack
 
 - [37 governed KPIs and reusable data-domain model](docs/revenue-question-pack-v2.md)
