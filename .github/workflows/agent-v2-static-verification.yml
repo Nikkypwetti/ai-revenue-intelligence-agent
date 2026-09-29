@@ -45,6 +45,9 @@ jobs:
       - name: Salesforce adapter contract
         run: bash scripts/verify-salesforce-connector-static.sh
 
+      - name: Incident notification contract
+        run: bash scripts/verify-incident-notifications-static.sh
+
       - name: Secret-like committed file names
         run: |
           if git ls-files | grep -Ei '(^|/)(\.env$|.*\.pem$|.*\.key$|.*credentials.*\.json$)'; then
