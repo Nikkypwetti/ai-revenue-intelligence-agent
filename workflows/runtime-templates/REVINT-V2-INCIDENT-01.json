@@ -1,0 +1,245 @@
+[
+  {
+    "id": "REVINTV2INCIDENT01",
+    "name": "REVINT-V2-INCIDENT-01 | External Incident Notification",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 5
+              }
+            ]
+          }
+        },
+        "id": "inc01schedule",
+        "name": "INT | Five-Minute Incident Check",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | External Incident Notification\n\nNODE\nINT | Five-Minute Incident Check\n\nPURPOSE\nChecks bounded alert-ready state every five minutes.\n\nCONTROL BOUNDARY\nTrigger only; no direct failure-table or provider authority.\n\nDOCUMENTATION STATUS\nAgent V2 production hardening — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.get_incident_notification_context(20,30) AS incident_context;",
+          "options": {}
+        },
+        "id": "inc02context",
+        "name": "DB | Load Incident Notification Context",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          260,
+          0
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | External Incident Notification\n\nNODE\nDB | Load Incident Notification Context\n\nPURPOSE\nLoads only deduplicated observability.alert_ready rows and the incident circuit gate.\n\nCONTROL BOUNDARY\nReporting RO cannot read raw runtime failure or dead-letter payload tables.\n\nDOCUMENTATION STATUS\nAgent V2 production hardening — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const raw=$json.incident_context;\nconst ctx=typeof raw==='string'?JSON.parse(raw):raw;\nconst notifications=Array.isArray(ctx?.notifications)?ctx.notifications:[];\nlet gate=ctx?.reliability_gate ?? {};\nif(typeof gate==='string'){try{gate=JSON.parse(gate)}catch{gate={allowed:false}}}\nconst enabled=$env.INCIDENT_SLACK_ENABLED==='true';\nconst channel=String($env.INCIDENT_SLACK_CHANNEL_ID ?? '').trim();\nconst clean=v=>String(v??'').replace(/[<>]/g,'').replace(/[\\u0000-\\u001f\\u007f]/g,' ').slice(0,700);\nconst lines=['*Agent V2 incident alert*'];\nfor(const item of notifications.slice(0,20)){\n  const a=item?.alert ?? {};\n  const severity=clean(a.severity ?? 'alert').toUpperCase();\n  const component=clean(a.component_key ?? a.component ?? 'runtime');\n  const kind=clean(a.alert_type ?? a.alert_key ?? a.status ?? 'attention_required');\n  const detail=clean(a.message ?? a.reason ?? '');\n  lines.push('• ['+severity+'] '+component+' — '+kind+(detail?' — '+detail:''));\n}\nlet text=lines.join('\\n');\nif(text.length>10000) text=text.slice(0,9990)+'…';\nconst shouldSend=enabled && gate?.allowed===true && notifications.length>0 && channel.length>0;\nreturn {\n  incident_context:ctx,\n  notifications,\n  fingerprints:notifications.map(x=>x?.fingerprint).filter(Boolean),\n  slack_payload:{channel_id:channel,text},\n  should_send:shouldSend,\n  event_id:'EVT-INCIDENT-'+String(Math.floor(Date.now()/300000)),\n  skip_reason:shouldSend?null:(!enabled?'INCIDENT_SLACK_DISABLED':(notifications.length===0?'NO_PENDING_ALERTS':(gate?.allowed!==true?'INCIDENT_CIRCUIT_OPEN':'INCIDENT_DESTINATION_MISSING')))\n};"
+        },
+        "id": "inc03payload",
+        "name": "REP | Build Bounded Incident Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | External Incident Notification\n\nNODE\nREP | Build Bounded Incident Payload\n\nPURPOSE\nBuilds one bounded Slack message from sanitized alert-ready rows.\n\nCONTROL BOUNDARY\nNo raw exception payload, credentials, stack trace, or caller-controlled destination is used.\n\nDOCUMENTATION STATUS\nAgent V2 production hardening — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "inc-send",
+                "leftValue": "={{ $json.should_send }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "inc04if",
+        "name": "VAL | Incident Delivery Required?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          780,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | External Incident Notification\n\nNODE\nVAL | Incident Delivery Required?\n\nPURPOSE\nSends only when enabled, alerts exist, circuit allows, and trusted channel is configured.\n\nCONTROL BOUNDARY\nFail-closed; disabled/missing configuration produces no external call.\n\nDOCUMENTATION STATUS\nAgent V2 production hardening — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "select": "channel",
+          "channelId": {
+            "__rl": true,
+            "value": "={{ $json.slack_payload.channel_id }}",
+            "mode": "id"
+          },
+          "text": "={{ $json.slack_payload.text }}",
+          "otherOptions": {}
+        },
+        "id": "inc05slack",
+        "name": "DEL | Send Slack Incident",
+        "type": "n8n-nodes-base.slack",
+        "typeVersion": 2.7,
+        "position": [
+          1040,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "slackApi": {
+            "id": "REVINTSLACKINCIDENT001",
+            "name": "REVINT | Slack Incidents"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | External Incident Notification\n\nNODE\nDEL | Send Slack Incident\n\nPURPOSE\nSends the bounded incident message to the trusted environment-configured channel.\n\nCONTROL BOUNDARY\nDedicated incident credential; separate from manager report delivery.\n\nDOCUMENTATION STATUS\nAgent V2 production hardening — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_incident_notification($1,$2::jsonb,'slack',$3) AS incident_result;",
+          "options": {
+            "queryReplacement": "={{ [ $('REP | Build Bounded Incident Payload').item.json.event_id, JSON.stringify($('REP | Build Bounded Incident Payload').item.json.notifications), 'incident-slack' ] }}"
+          }
+        },
+        "id": "inc06audit",
+        "name": "AUD | Record Incident Notification",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1300,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | External Incident Notification\n\nNODE\nAUD | Record Incident Notification\n\nPURPOSE\nRecords notification fingerprints only after provider success to enable cooldown/deduplication.\n\nCONTROL BOUNDARY\nAudit Writer receives bounded fingerprint/provider metadata, not raw incident payloads.\n\nDOCUMENTATION STATUS\nAgent V2 production hardening — 2026-09-29."
+      },
+      {
+        "parameters": {},
+        "id": "inc07skip",
+        "name": "SYS | No Incident Delivery",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1040,
+          120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-INCIDENT-01 | External Incident Notification\n\nNODE\nSYS | No Incident Delivery\n\nPURPOSE\nEnds cleanly when there are no pending alerts or incident delivery is disabled.\n\nCONTROL BOUNDARY\nNo external provider call and no notification state mutation.\n\nDOCUMENTATION STATUS\nAgent V2 production hardening — 2026-09-29."
+      }
+    ],
+    "connections": {
+      "INT | Five-Minute Incident Check": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Incident Notification Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Load Incident Notification Context": {
+        "main": [
+          [
+            {
+              "node": "REP | Build Bounded Incident Payload",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Build Bounded Incident Payload": {
+        "main": [
+          [
+            {
+              "node": "VAL | Incident Delivery Required?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Incident Delivery Required?": {
+        "main": [
+          [
+            {
+              "node": "DEL | Send Slack Incident",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "SYS | No Incident Delivery",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DEL | Send Slack Incident": {
+        "main": [
+          [
+            {
+              "node": "AUD | Record Incident Notification",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "pinData": {},
+    "tags": []
+  }
+]
