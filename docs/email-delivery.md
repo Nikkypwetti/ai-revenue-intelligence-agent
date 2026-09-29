@@ -41,14 +41,21 @@ API remains the default channel. Slack and email are separate governed provider 
 
 ## Validation status
 
-Controlled local validation completed on 2026-09-29:
+End-to-end local validation completed on 2026-09-29 through the real Agent Core route:
 
+- request: `delivery_channel=email`
+- governed KPI: `open_pipeline`
+- governed value: `1200 USD`
+- presentation: `kpi_card`
 - authorized principal: `service:report-api`
 - trusted recipient resolved server-side
 - Gmail OAuth send succeeded
 - provider message ID returned
-- `email_delivery` reliability policy passed
-- reliable audit logging passed
-- final bounded result returned with `status=delivered`
+- bounded result returned with `status=delivered`, `provider=gmail`, `destination_key=manager_email`
+- matching `report_completed` and `email_report_delivered` audit events shared the same request/correlation IDs
+- `agent_reporting` circuit: `closed`, zero consecutive failures
+- `email_delivery` circuit: `closed`, zero consecutive failures
 
-The temporary manual regression caller may remain inactive for future delivery checks.
+Canonical runtime workflow ID: `REVINTV2EMAIL01`.
+
+The temporary manual regression caller may remain inactive for future delivery checks. An older manually imported duplicate should remain inactive and can be removed only after confirming the canonical workflow is active/published and the Agent Core end-to-end test passes.
