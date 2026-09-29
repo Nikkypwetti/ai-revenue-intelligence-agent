@@ -58,4 +58,4 @@ End-to-end local validation completed on 2026-09-29 through the real Agent Core 
 
 Canonical runtime workflow ID: `REVINTV2EMAIL01`.
 
-The temporary manual regression caller may remain inactive for future delivery checks. An older manually imported duplicate should remain inactive and can be removed only after confirming the canonical workflow is active/published and the Agent Core end-to-end test passes.
+The temporary manual regression caller may remain inactive for future delivery checks. Duplicate cleanup is complete: manually imported workflow `5TeNU49BYFMaHh2l` is archived, while canonical `REVINTV2EMAIL01` remains active, published, and unarchived.
