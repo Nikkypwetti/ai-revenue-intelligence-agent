@@ -166,8 +166,8 @@
         "type": "n8n-nodes-base.postgres",
         "typeVersion": 2.7,
         "position": [
-          1560,
-          -100
+          1740,
+          -180
         ],
         "retryOnFail": true,
         "maxTries": 3,
@@ -193,8 +193,8 @@
         "type": "n8n-nodes-base.postgres",
         "typeVersion": 2.7,
         "position": [
-          1820,
-          -100
+          1970,
+          -180
         ],
         "retryOnFail": true,
         "maxTries": 3,
@@ -218,6 +218,68 @@
           140
         ],
         "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nSYS | Circuit Open — Skip Salesforce\n\nLAYER\nReliability\n\nPURPOSE\nEnds the execution without contacting Salesforce when the circuit is open.\n\nREUSABLE AGENT ROLE\nSource-specific adapter around the reusable Agent V2 canonical contract. Client OAuth, mappings and activation are configuration, not a rebuild of the core agent.\n\nCONTROL BOUNDARY\nNo source or data mutation occurs.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "sf-write-enabled",
+                "leftValue": "={{ $env.SALESFORCE_CANONICAL_WRITE_ENABLED === 'true' }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "sf075mode",
+        "name": "VAL | Canonical Salesforce Writes Enabled?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          1510,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nVAL | Canonical Salesforce Writes Enabled?\n\nLAYER\nValidation / Source Authority Guard\n\nPURPOSE\nSeparates live Salesforce source validation from canonical revenue ingestion.\n\nREUSABLE AGENT ROLE\nSalesforce may run in shadow mode while HubSpot remains the authoritative deal source.\n\nCONTROL BOUNDARY\nCanonical Salesforce writes require SALESFORCE_CANONICAL_WRITE_ENABLED=true. Default false prevents cross-CRM double counting.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_reliable_audit_event($1,NULL,NULL,'connector_shadow_validated','salesforce_connector','n8n_salesforce_connector',$2::jsonb,'salesforce_sync',now()) AS audit_result;",
+          "options": {
+            "queryReplacement": "={{ [ $json.event_id + '-SHADOW', JSON.stringify({ connector_key:$json.connector_key, source_count:$json.source_count, valid_count:$json.record_count, rejected_count:$json.rejected_count, mode:'shadow', canonical_write:false }) ] }}"
+          }
+        },
+        "id": "sf076shadow",
+        "name": "AUD | Record Salesforce Shadow Validation",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1740,
+          80
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nAUD | Record Salesforce Shadow Validation\n\nLAYER\nAudit / Shadow Validation\n\nPURPOSE\nRecords Salesforce source counts and validation outcome without writing canonical deals.\n\nREUSABLE AGENT ROLE\nAllows a real client to connect and validate Salesforce while another CRM remains authoritative.\n\nCONTROL BOUNDARY\nAudit-only path. No Connector Writer credential and no reporting.deals mutation.\n\nDOCUMENTATION STATUS\nAgent V2 client implementation — 2026-09-29."
       }
     ],
     "connections": {
@@ -298,7 +360,7 @@
         "main": [
           [
             {
-              "node": "DB | Ingest Salesforce Batch",
+              "node": "VAL | Canonical Salesforce Writes Enabled?",
               "type": "main",
               "index": 0
             }
@@ -310,6 +372,24 @@
           [
             {
               "node": "AUD | Complete Salesforce Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Canonical Salesforce Writes Enabled?": {
+        "main": [
+          [
+            {
+              "node": "DB | Ingest Salesforce Batch",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "AUD | Record Salesforce Shadow Validation",
               "type": "main",
               "index": 0
             }
