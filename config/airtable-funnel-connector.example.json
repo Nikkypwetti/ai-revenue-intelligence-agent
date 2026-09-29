@@ -1,0 +1,27 @@
+{
+  "schema_version": 2,
+  "connectors": [
+    {
+      "connector_key": "airtable_leads",
+      "connector_type": "airtable",
+      "display_name": "Airtable Lead Intake Funnel Sync",
+      "object_type": "funnel",
+      "contract_version": 1,
+      "active": false,
+      "field_mappings": [
+        {"canonical_field":"sales_rep","source_field":"Assigned Owner","transform_key":"text","required":false},
+        {"canonical_field":"lead_source","source_field":"revint_lead_source","default_value":"airtable_intake","transform_key":"text","required":false},
+        {"canonical_field":"segment","source_field":"Team size","transform_key":"text","required":false},
+        {"canonical_field":"industry","source_field":"Business type","transform_key":"text","required":false},
+        {"canonical_field":"created_at","source_field":"revint_created_at","transform_key":"timestamp","required":true},
+        {"canonical_field":"mql_at","source_field":"revint_mql_at","transform_key":"timestamp","required":false},
+        {"canonical_field":"sql_at","source_field":"revint_sql_at","transform_key":"timestamp","required":false},
+        {"canonical_field":"opportunity_at","source_field":"revint_opportunity_at","transform_key":"timestamp","required":false},
+        {"canonical_field":"won_at","source_field":"revint_won_at","transform_key":"timestamp","required":false},
+        {"canonical_field":"lost_at","source_field":"revint_lost_at","transform_key":"timestamp","required":false},
+        {"canonical_field":"source_updated_at","source_field":"revint_source_updated_at","transform_key":"timestamp","required":false}
+      ],
+      "value_mappings": []
+    }
+  ]
+}
