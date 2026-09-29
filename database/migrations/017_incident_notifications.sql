@@ -53,6 +53,38 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION governance.get_incident_notification_context(
+  p_limit integer DEFAULT 20,
+  p_cooldown_minutes integer DEFAULT 30
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, governance
+AS $
+DECLARE
+  v_gate jsonb;
+  v_notifications jsonb;
+BEGIN
+  v_gate := governance.acquire_runtime_gate('incident_notification', now());
+
+  IF COALESCE((v_gate->>'allowed')::boolean,false) THEN
+    v_notifications := governance.get_pending_incident_notifications(
+      p_limit,p_cooldown_minutes
+    );
+  ELSE
+    v_notifications := '[]'::jsonb;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'reliability_gate',v_gate,
+    'notifications',v_notifications,
+    'generated_at',now()
+  );
+END;
+$;
+
 CREATE OR REPLACE FUNCTION governance.record_incident_notification(
   p_event_id text,
   p_notifications jsonb,
@@ -135,9 +167,10 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION governance.get_pending_incident_notifications(integer,integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION governance.get_incident_notification_context(integer,integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION governance.record_incident_notification(text,jsonb,text,text) FROM PUBLIC;
 
-GRANT EXECUTE ON FUNCTION governance.get_pending_incident_notifications(integer,integer)
+GRANT EXECUTE ON FUNCTION governance.get_incident_notification_context(integer,integer)
 TO revint_governance_ro;
 
 GRANT EXECUTE ON FUNCTION governance.record_incident_notification(text,jsonb,text,text)
