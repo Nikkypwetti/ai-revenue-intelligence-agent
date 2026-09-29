@@ -80,6 +80,9 @@ services:
       REPORTING_DB_HOST: reporting-db
       REPORTING_DB_PORT: 5432
       REPORTING_DB_NAME: ${REPORTING_DB_NAME:-revenue_reporting}
+      SALESFORCE_CANONICAL_WRITE_ENABLED: ${SALESFORCE_CANONICAL_WRITE_ENABLED:-false}
+      AIRTABLE_BASE_ID: ${AIRTABLE_BASE_ID:-}
+      AIRTABLE_TABLE_ID: ${AIRTABLE_TABLE_ID:-}
     volumes:
       - n8n_data:/home/node/.n8n
     healthcheck:
