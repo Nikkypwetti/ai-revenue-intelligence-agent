@@ -25,6 +25,7 @@ policy_state="$("${compose[@]}" exec -T reporting-db psql -X -q -A -t   -U "$REP
 [[ "$policy_state" =~ ^groq\|[01]\|[01]$ ]] || {
   echo "FAIL: AI adapter policy is invalid: $policy_state"; exit 1;
 }
+IFS='|' read -r _ live_intent_enabled live_summary_enabled <<< "$policy_state"
 
 priv_state="$("${compose[@]}" exec -T reporting-db psql -X -q -A -t   -U "$REPORTING_DB_ADMIN_USER" -d "$REPORTING_DB_NAME" -c "
   SELECT
@@ -42,8 +43,12 @@ workflow_state="$("${compose[@]}" exec -T n8n-db psql -X -q -A -F '|'   -U "$N8N
   WHERE id IN ('REVINTV2AIADAPTER01','REVINTV2AGENTCORE01')
   ORDER BY id;
 ")"
-printf '%s\n' "$workflow_state" | grep -q '^REVINTV2AIADAPTER01|1|1|17$'
-printf '%s\n' "$workflow_state" | grep -q '^REVINTV2AGENTCORE01|1|1|22$'
+printf '%s\n' "$workflow_state" | awk -F '|' '$1=="REVINTV2AIADAPTER01" && $2=="1" && $3=="1" && ($4+0)>=17 {ok=1} END{exit !ok}' || {
+  echo "FAIL: live AI adapter workflow is not active/published with the required baseline nodes: $workflow_state"; exit 1;
+}
+printf '%s\n' "$workflow_state" | awk -F '|' '$1=="REVINTV2AGENTCORE01" && $2=="1" && $3=="1" && ($4+0)>=22 {ok=1} END{exit !ok}' || {
+  echo "FAIL: live Agent Core workflow is not active/published with the AI integration baseline: $workflow_state"; exit 1;
+}
 
 python3 - <<'PY'
 import json
@@ -77,9 +82,7 @@ assert core['connections']['CTX | Bind SSO Principal']['main'][0][0]['node']=='C
 print('PASS: AI adapter is internal, credential-isolated, fail-soft, and wired behind security.')
 PY
 
-intent_enabled="${GROQ_INTENT_ENABLED:-false}"
-summary_enabled="${GROQ_SUMMARY_ENABLED:-false}"
-if [[ "$intent_enabled" == "true" || "$summary_enabled" == "true" ]]; then
+if [[ "$live_intent_enabled" == "1" || "$live_summary_enabled" == "1" ]]; then
   credential_state="$("${compose[@]}" exec -T n8n-db psql -X -q -A -t     -U "$N8N_DB_USER" -d "$N8N_DB_NAME" -c "
       SELECT count(*) || '|' || count(*) FILTER (WHERE data NOT LIKE '{%')
       FROM credentials_entity WHERE id='REVINTGROQ001' AND type='groqApi';
