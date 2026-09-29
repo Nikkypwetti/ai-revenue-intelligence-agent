@@ -1,0 +1,347 @@
+[
+  {
+    "id": "REVINTV2SALESFORCE01",
+    "name": "REVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "minutes",
+                "minutesInterval": 15
+              }
+            ]
+          }
+        },
+        "id": "sf01schedule",
+        "name": "INT | Fifteen-Minute Salesforce Sync",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nINT | Fifteen-Minute Salesforce Sync\n\nPURPOSE\nStarts the bounded Salesforce Opportunity incremental sync every 15 minutes.\n\nCONTROL BOUNDARY\nTrigger only; grants no CRM or database authority.\n\nDOCUMENTATION STATUS\nFirst-client Salesforce adapter — 2026-09-29."
+      },
+      {
+        "parameters": {},
+        "id": "sf02manual",
+        "name": "INT | Manual Salesforce Sync",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          0,
+          120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nINT | Manual Salesforce Sync\n\nPURPOSE\nProvides a controlled manual UAT/probe entry point.\n\nCONTROL BOUNDARY\nManual trigger only; downstream governance remains authoritative.\n\nDOCUMENTATION STATUS\nFirst-client Salesforce adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.get_connector_sync_context('salesforce_primary') AS sync_context;",
+          "options": {}
+        },
+        "id": "sf03context",
+        "name": "DB | Load Salesforce Sync Context",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          260,
+          10
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nDB | Load Salesforce Sync Context\n\nPURPOSE\nLoads connector activation, cursor window, business currency and reliability gate through the bounded governance function.\n\nCONTROL BOUNDARY\nReporting RO may execute the bounded function but cannot modify governance.\n\nDOCUMENTATION STATUS\nFirst-client Salesforce adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForEachItem",
+          "jsCode": "const raw=$json.sync_context;\nconst ctx=typeof raw==='string'?JSON.parse(raw):raw;\nif(!ctx || ctx.connector_key!=='salesforce_primary' || ctx.connector_type!=='salesforce'){\n  throw new Error('SALESFORCE_SYNC_CONTEXT_INVALID');\n}\nlet gate=ctx.reliability_gate;\nif(typeof gate==='string') gate=JSON.parse(gate);\nconst allowed=gate?.allowed===true;\nconst q=v=>String(v).replace(/'/g,\"\\\\'\");\nconst start=new Date(ctx.query_start_at).toISOString();\nconst end=new Date(ctx.query_end_at).toISOString();\nconst fields=[\n  'Id','Name','Amount','StageName','OwnerId','LeadSource',\n  'CreatedDate','CloseDate','LastModifiedDate',\n  'Primary_Need__c','Decision_Maker_Confirmed__c','Lost_Reason__c',\n  'Implementation_Priority__c','Won_Date__c','Lost_Date__c','High_Value__c'\n];\nreturn {\n  sync_context:ctx,\n  should_sync:allowed,\n  skip_reason:allowed?null:'RELIABILITY_CIRCUIT_OPEN',\n  soql:'SELECT '+fields.join(',')+\n    \" FROM Opportunity WHERE LastModifiedDate >= \"+start+\n    \" AND LastModifiedDate <= \"+end+\n    ' ORDER BY LastModifiedDate ASC LIMIT 2000'\n};"
+        },
+        "id": "sf04query",
+        "name": "CTX | Build Salesforce SOQL",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          520,
+          10
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nCTX | Build Salesforce SOQL\n\nPURPOSE\nBuilds a fixed-field, time-bounded Opportunity query from governed sync context.\n\nCONTROL BOUNDARY\nNo caller or AI controls object names, field names, predicates or LIMIT.\n\nDOCUMENTATION STATUS\nFirst-client Salesforce adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "sf-allowed",
+                "leftValue": "={{ $json.should_sync }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "sf05if",
+        "name": "VAL | Salesforce Sync Allowed?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          780,
+          10
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nVAL | Salesforce Sync Allowed?\n\nPURPOSE\nStops polling while the Salesforce reliability circuit is open.\n\nCONTROL BOUNDARY\nFail-closed deterministic reliability gate.\n\nDOCUMENTATION STATUS\nFirst-client Salesforce adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.SALESFORCE_INSTANCE_URL.replace(/\\/$/,'') + '/services/data/v61.0/query' }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "salesforceOAuth2Api",
+          "sendQuery": true,
+          "queryParameters": {
+            "parameters": [
+              {
+                "name": "q",
+                "value": "={{ $json.soql }}"
+              }
+            ]
+          },
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "json",
+                "neverError": false,
+                "fullResponse": false
+              }
+            },
+            "timeout": 30000
+          }
+        },
+        "id": "sf06api",
+        "name": "SRC | Fetch Salesforce Opportunities",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.5,
+        "position": [
+          1040,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "salesforceOAuth2Api": {
+            "id": "REVINTSALESFORCERO001",
+            "name": "REVINT | Salesforce Opportunities RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nSRC | Fetch Salesforce Opportunities\n\nPURPOSE\nReads the bounded Opportunity query through the dedicated Agent V2 Salesforce OAuth credential.\n\nCONTROL BOUNDARY\nSource access is read-only by deployment policy; the workflow contains no Salesforce write operation.\n\nDOCUMENTATION STATUS\nFirst-client Salesforce adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const contextRaw=$('DB | Load Salesforce Sync Context').first().json.sync_context;\nconst ctx=typeof contextRaw==='string'?JSON.parse(contextRaw):contextRaw;\nconst page=$input.first()?.json ?? {};\nif(page.done!==true || page.nextRecordsUrl){\n  throw new Error('SALESFORCE_SYNC_WINDOW_LIMIT_EXCEEDED');\n}\nconst results=Array.isArray(page.records)?page.records:[];\nif(results.length>2000) throw new Error('SALESFORCE_SYNC_RESULT_LIMIT_EXCEEDED');\nconst expectedCurrency=String(ctx.currency_code??'').trim().toUpperCase();\nconst stageMap={\n  'Discovery':'open',\n  'Technical Review':'open',\n  'Proposal Sent':'open',\n  'Negotiation':'open',\n  'Closed Won':'won',\n  'Closed Lost':'lost'\n};\nconst parseTimestamp=v=>{\n  if(v===null||v===undefined||v==='') return null;\n  const s=String(v);\n  const normalized=/^\\d{4}-\\d{2}-\\d{2}$/.test(s)?s+'T00:00:00.000Z':s;\n  const d=new Date(normalized);\n  return Number.isNaN(d.getTime())?null:d.toISOString();\n};\nconst records=[];\nlet rejectedCount=0;\nlet earliestRejectedAt=null;\nfor(const r of results){\n  const id=String(r?.Id??'').trim();\n  const amountRaw=r?.Amount;\n  const amount=amountRaw===null||amountRaw===undefined||amountRaw===''?NaN:Number(amountRaw);\n  const stageName=String(r?.StageName??'').trim();\n  const stageCategory=stageMap[stageName]??null;\n  const updatedAt=parseTimestamp(r?.LastModifiedDate);\n  const createdAt=parseTimestamp(r?.CreatedDate);\n  const closeDate=parseTimestamp(r?.CloseDate);\n  const wonDate=parseTimestamp(r?.Won_Date__c);\n  const lostDate=parseTimestamp(r?.Lost_Date__c);\n  const closedAt=stageCategory==='won'?(wonDate??closeDate):(stageCategory==='lost'?(lostDate??closeDate):null);\n  const valid=\n    id.length>0 && id.length<=200 &&\n    Number.isFinite(amount) && amount>=0 &&\n    /^[A-Z]{3}$/.test(expectedCurrency) &&\n    stageCategory!==null &&\n    updatedAt!==null &&\n    (stageCategory==='open' || closedAt!==null);\n  if(!valid){\n    rejectedCount+=1;\n    const candidate=updatedAt?new Date(updatedAt).getTime():null;\n    if(candidate!==null && (earliestRejectedAt===null || candidate<earliestRejectedAt)) earliestRejectedAt=candidate;\n    continue;\n  }\n  records.push({\n    source_record_id:id,\n    source_payload:{\n      Name:r.Name??null,\n      Amount:String(amount),\n      CurrencyIsoCode:expectedCurrency,\n      StageName:stageName,\n      OwnerId:r.OwnerId??null,\n      LeadSource:r.LeadSource??null,\n      CreatedDate:createdAt,\n      CloseDate:closeDate,\n      LastModifiedDate:updatedAt,\n      Primary_Need__c:r.Primary_Need__c??null,\n      Decision_Maker_Confirmed__c:r.Decision_Maker_Confirmed__c??null,\n      Lost_Reason__c:r.Lost_Reason__c??null,\n      Implementation_Priority__c:r.Implementation_Priority__c??null,\n      Won_Date__c:wonDate,\n      Lost_Date__c:lostDate,\n      High_Value__c:r.High_Value__c??null\n    }\n  });\n}\nconst queryStart=new Date(ctx.query_start_at).getTime();\nconst queryEnd=new Date(ctx.query_end_at).getTime();\nlet watermarkMs=queryEnd;\nif(rejectedCount>0) watermarkMs=earliestRejectedAt===null?queryStart:Math.max(queryStart,earliestRejectedAt);\nreturn [{json:{\n  connector_key:'salesforce_primary',\n  query_start_at:new Date(queryStart).toISOString(),\n  query_end_at:new Date(queryEnd).toISOString(),\n  watermark:new Date(watermarkMs).toISOString(),\n  source_count:results.length,\n  record_count:records.length,\n  rejected_count:rejectedCount,\n  records,\n  event_id:'SALESFORCE-SYNC-'+String(queryEnd)\n}}];"
+        },
+        "id": "sf07normalize",
+        "name": "VAL | Normalize Salesforce Opportunities",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1300,
+          -100
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nVAL | Normalize Salesforce Opportunities\n\nPURPOSE\nValidates AsterNova Opportunity records and maps them into the canonical deal ingestion envelope.\n\nCONTROL BOUNDARY\nUnknown stages, missing amounts, invalid timestamps, oversized windows and missing close timestamps fail closed.\n\nDOCUMENTATION STATUS\nFirst-client Salesforce adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT ingestion.ingest_deal_batch_from_source($1,$2::jsonb) AS batch_result;",
+          "options": {
+            "queryReplacement": "={{ [ $json.connector_key, JSON.stringify($json.records) ] }}"
+          }
+        },
+        "id": "sf08batch",
+        "name": "DB | Ingest Salesforce Batch",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1560,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGINGESTWR001",
+            "name": "REVINT | Connector Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nDB | Ingest Salesforce Batch\n\nPURPOSE\nWrites validated Opportunity records only through the canonical controlled ingestion gateway.\n\nCONTROL BOUNDARY\nConnector Writer cannot directly read or modify reporting facts.\n\nDOCUMENTATION STATUS\nFirst-client Salesforce adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_connector_sync_completion($1,$2,$3::timestamptz,$4::timestamptz,$5::timestamptz,$6::integer,$7::integer,$8::integer) AS sync_result;",
+          "options": {
+            "queryReplacement": "={{ [ $('VAL | Normalize Salesforce Opportunities').item.json.event_id, $('VAL | Normalize Salesforce Opportunities').item.json.connector_key, $('VAL | Normalize Salesforce Opportunities').item.json.query_start_at, $('VAL | Normalize Salesforce Opportunities').item.json.query_end_at, $('VAL | Normalize Salesforce Opportunities').item.json.watermark, $('VAL | Normalize Salesforce Opportunities').item.json.source_count, $('VAL | Normalize Salesforce Opportunities').item.json.record_count, $('VAL | Normalize Salesforce Opportunities').item.json.rejected_count ] }}"
+          }
+        },
+        "id": "sf09audit",
+        "name": "AUD | Complete Salesforce Sync",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1820,
+          -100
+        ],
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nAUD | Complete Salesforce Sync\n\nPURPOSE\nRecords completion and advances the cursor only after governed batch ingestion completes.\n\nCONTROL BOUNDARY\nAudit Writer has append/completion authority only.\n\nDOCUMENTATION STATUS\nFirst-client Salesforce adapter — 2026-09-29."
+      },
+      {
+        "parameters": {},
+        "id": "sf10skip",
+        "name": "SYS | Salesforce Circuit Open — Skip Sync",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1040,
+          160
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-SALESFORCE-01 | Incremental Opportunity Sync\n\nNODE\nSYS | Salesforce Circuit Open — Skip Sync\n\nPURPOSE\nStops source polling while reliability governance blocks the component.\n\nCONTROL BOUNDARY\nNo source or database call occurs.\n\nDOCUMENTATION STATUS\nFirst-client Salesforce adapter — 2026-09-29."
+      }
+    ],
+    "connections": {
+      "INT | Fifteen-Minute Salesforce Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Salesforce Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "INT | Manual Salesforce Sync": {
+        "main": [
+          [
+            {
+              "node": "DB | Load Salesforce Sync Context",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Load Salesforce Sync Context": {
+        "main": [
+          [
+            {
+              "node": "CTX | Build Salesforce SOQL",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Build Salesforce SOQL": {
+        "main": [
+          [
+            {
+              "node": "VAL | Salesforce Sync Allowed?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Salesforce Sync Allowed?": {
+        "main": [
+          [
+            {
+              "node": "SRC | Fetch Salesforce Opportunities",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "SYS | Salesforce Circuit Open — Skip Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "SRC | Fetch Salesforce Opportunities": {
+        "main": [
+          [
+            {
+              "node": "VAL | Normalize Salesforce Opportunities",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Normalize Salesforce Opportunities": {
+        "main": [
+          [
+            {
+              "node": "DB | Ingest Salesforce Batch",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Ingest Salesforce Batch": {
+        "main": [
+          [
+            {
+              "node": "AUD | Complete Salesforce Sync",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "versionId": "ca0c22a2-51e9-4f91-a8f5-b4f7fe28a6ad",
+    "tags": []
+  }
+]

@@ -42,6 +42,9 @@ jobs:
       - name: Multi-CRM and local hardening contract
         run: bash scripts/verify-multi-crm-sync-static.sh
 
+      - name: Salesforce adapter contract
+        run: bash scripts/verify-salesforce-connector-static.sh
+
       - name: Secret-like committed file names
         run: |
           if git ls-files | grep -Ei '(^|/)(\.env$|.*\.pem$|.*\.key$|.*credentials.*\.json$)'; then
