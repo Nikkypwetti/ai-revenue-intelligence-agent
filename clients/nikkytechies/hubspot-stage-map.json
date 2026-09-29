@@ -1,0 +1,14 @@
+{
+  "pipeline": "default",
+  "source": "HubSpot DEAL dealstage",
+  "verified_on": "2026-09-29",
+  "stages": [
+    {"value": "5742274793", "label": "New Lead", "canonical_category": "open"},
+    {"value": "5742274794", "label": "Discovery Call Scheduled", "canonical_category": "open"},
+    {"value": "5742274795", "label": "Proposal Sent", "canonical_category": "open"},
+    {"value": "5742274796", "label": "Negotiating", "canonical_category": "open"},
+    {"value": "5742274798", "label": "Deal Won", "canonical_category": "won"},
+    {"value": "5742274799", "label": "Deal Lost", "canonical_category": "lost"}
+  ],
+  "runtime_rule": "Prefer hs_is_closed_won / hs_is_closed deterministic flags; retain dealstage as stage_name."
+}
