@@ -1,0 +1,453 @@
+[
+  {
+    "id": "REVINTV2EMAIL01",
+    "name": "REVINT-V2-EMAIL-01 | Governed Email Report Delivery",
+    "active": false,
+    "nodes": [
+      {
+        "parameters": {
+          "inputSource": "passthrough"
+        },
+        "id": "em01int",
+        "name": "INT | Governed Email Delivery Adapter",
+        "type": "n8n-nodes-base.executeWorkflowTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -1000,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nINT | Governed Email Delivery Adapter\n\nPURPOSE\nReceives an already-governed report artifact from Agent Core.\n\nCONTROL BOUNDARY\nInternal sub-workflow only; no public webhook.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT to_jsonb(r) AS email_authorization FROM governance.resolve_email_delivery_request($1) r;",
+          "options": {
+            "queryReplacement": "={{ [ $json.delivery_request.principal_key ] }}"
+          }
+        },
+        "id": "em02auth",
+        "name": "DB | Resolve Email Authorization",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          -760,
+          0
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGREPORTRO001",
+            "name": "REVINT | Reporting RO"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nDB | Resolve Email Authorization\n\nPURPOSE\nResolves tenant, role, enabled state, trusted recipient and payload bounds.\n\nCONTROL BOUNDARY\nCaller and AI cannot provide the recipient email address.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const original=$('INT | Governed Email Delivery Adapter').item.json; let a=$json.email_authorization??null; if(typeof a==='string'){try{a=JSON.parse(a)}catch{a=null}} return {...original,email_authorization:a??{allowed:false,reason:'EMAIL_AUTHORIZATION_INVALID'}};"
+        },
+        "id": "em03attach",
+        "name": "CTX | Attach Email Authorization",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          -520,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nCTX | Attach Email Authorization\n\nPURPOSE\nReattaches trusted email policy to the governed report artifact.\n\nCONTROL BOUNDARY\nDoes not modify report facts or identity.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "email-auth",
+                "leftValue": "={{ $json.email_authorization.allowed === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "em04if",
+        "name": "VAL | Email Delivery Authorized?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          -280,
+          0
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nVAL | Email Delivery Authorized?\n\nPURPOSE\nRoutes only authorized manager email delivery.\n\nCONTROL BOUNDARY\nFail-closed on disabled tenant, role, principal or recipient policy.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const d=$json;\nconst a=d.email_authorization??{};\nconst b=d.delivery_request?.response_body??{};\nconst r=b.report??{};\nconst p=b.presentation??{};\nconst esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');\nconst title=String(p.title??r.kpi_key??'Revenue Report').replace(/[\\u0000-\\u001f\\u007f]/g,' ').trim();\nlet subject=('Revenue Report — '+title).slice(0,Number(a.max_subject_chars??180));\nconst parts=['<h2>'+esc(title)+'</h2>'];\nif(p.summary) parts.push('<p>'+esc(p.summary)+'</p>');\nif(Array.isArray(p.key_facts)&&p.key_facts.length) parts.push('<h3>Key facts</h3><ul>'+p.key_facts.slice(0,8).map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>');\nconst cp=r.current_period??{};\nif(cp.value!==undefined&&cp.value!==null) parts.push('<p><strong>Current value:</strong> '+esc(cp.value)+(r.currency_code?' '+esc(r.currency_code):(r.unit?' '+esc(r.unit):''))+'</p>');\nconst rows=p.data?.rows;\nif(Array.isArray(rows)&&rows.length){\n  parts.push('<h3>Data preview</h3><pre>'+esc(rows.slice(0,10).map(x=>JSON.stringify(x)).join('\\n')).slice(0,8000)+'</pre>');\n}\nconst body=parts.join('\\n').slice(0,Number(a.max_body_chars??20000));\nconst valid=/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(String(a.recipient_email??'')) && subject.length>0 && body.length>0 && body.length<=Number(a.max_body_chars??20000);\nreturn {...d,email_payload:{send_to:a.recipient_email,subject,html:body},email_payload_validation:{valid,subject_length:subject.length,body_length:body.length}};"
+        },
+        "id": "em05payload",
+        "name": "REP | Build Email Report Payload",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          0,
+          -120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nREP | Build Email Report Payload\n\nPURPOSE\nBuilds bounded HTML email content only from the governed presentation/report artifact.\n\nCONTROL BOUNDARY\nRecipient comes only from governance; HTML is escaped and bounded.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "strict",
+              "version": 3
+            },
+            "conditions": [
+              {
+                "id": "email-valid",
+                "leftValue": "={{ $json.email_payload_validation.valid === true }}",
+                "rightValue": "",
+                "operator": {
+                  "type": "boolean",
+                  "operation": "true",
+                  "singleValue": true
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "id": "em06valid",
+        "name": "VAL | Email Payload Valid?",
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.3,
+        "position": [
+          240,
+          -120
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nVAL | Email Payload Valid?\n\nPURPOSE\nValidates recipient shape and bounded subject/body before Gmail send.\n\nCONTROL BOUNDARY\nInvalid payload never reaches Gmail.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "resource": "message",
+          "operation": "send",
+          "sendTo": "={{ $json.email_payload.send_to }}",
+          "subject": "={{ $json.email_payload.subject }}",
+          "emailType": "html",
+          "message": "={{ $json.email_payload.html }}",
+          "options": {
+            "appendAttribution": false
+          }
+        },
+        "id": "em07gmail",
+        "name": "DEL | Send Gmail Report",
+        "type": "n8n-nodes-base.gmail",
+        "typeVersion": 2.2,
+        "position": [
+          500,
+          -180
+        ],
+        "retryOnFail": true,
+        "maxTries": 2,
+        "waitBetweenTries": 2000,
+        "credentials": {
+          "gmailOAuth2": {
+            "id": "REVINTGMAILREPORT001",
+            "name": "REVINT | Gmail Reports"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nDEL | Send Gmail Report\n\nPURPOSE\nSends the authorized report through the dedicated Agent V2 Gmail OAuth credential.\n\nCONTROL BOUNDARY\nDedicated credential; recipient cannot be supplied by caller or AI.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const o=$('REP | Build Email Report Payload').item.json; const x=$json??{}; return {...o,email_delivery_result:{status:'delivered',provider:'gmail',destination_key:o.email_authorization?.destination_key??null,destination_name:o.email_authorization?.display_name??null,message_id:x.id??x.messageId??null,delivered_at:new Date().toISOString()}};"
+        },
+        "id": "em08norm",
+        "name": "CTX | Normalize Email Delivery",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          760,
+          -180
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nCTX | Normalize Email Delivery\n\nPURPOSE\nReduces Gmail response to bounded delivery metadata.\n\nCONTROL BOUNDARY\nRaw provider response is not exposed.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_reliable_audit_event($1,$2,$3,$4,$5,$6,$7::jsonb,$8) AS audit_result;",
+          "options": {
+            "queryReplacement": "={{ [ 'EVT-EMAIL-' + $json.delivery_request.request_id, $json.delivery_request.request_id, $json.delivery_request.correlation_id, 'email_report_delivered', 'delivery', 'n8n_email_delivery_adapter', JSON.stringify({principal_key:$json.delivery_request.principal_key,destination_key:$json.email_delivery_result.destination_key,provider:'gmail',status:'delivered'}), 'email_delivery' ] }}"
+          }
+        },
+        "id": "em09audit",
+        "name": "AUD | Log Email Delivery",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          1000,
+          -180
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nAUD | Log Email Delivery\n\nPURPOSE\nRecords successful external email delivery with bounded metadata.\n\nCONTROL BOUNDARY\nNo email body, recipient secret, OAuth token or raw provider response is persisted.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const o=$('CTX | Normalize Email Delivery').item.json; return {delivery_result:o.email_delivery_result};"
+        },
+        "id": "em10return",
+        "name": "REP | Return Email Delivery Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1240,
+          -180
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nREP | Return Email Delivery Result\n\nPURPOSE\nReturns bounded delivered status to the caller workflow.\n\nCONTROL BOUNDARY\nNo provider secrets or raw email content returned.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const a=$json.email_authorization??{}; return {...$json,email_delivery_result:{status:'not_performed',provider:'gmail',reason:a.reason??'EMAIL_DELIVERY_NOT_AUTHORIZED',recorded_at:new Date().toISOString()}};"
+        },
+        "id": "em11not",
+        "name": "REP | Email Delivery Not Performed",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          0,
+          180
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nREP | Email Delivery Not Performed\n\nPURPOSE\nBuilds bounded status when email delivery is disabled/unauthorized.\n\nCONTROL BOUNDARY\nNo external call.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "return {...$json,email_delivery_result:{status:'not_performed',provider:'gmail',reason:'EMAIL_PAYLOAD_INVALID',recorded_at:new Date().toISOString()}};"
+        },
+        "id": "em12rej",
+        "name": "REP | Email Payload Rejected",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          500,
+          80
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nREP | Email Payload Rejected\n\nPURPOSE\nStops malformed/bounded-email failures before Gmail.\n\nCONTROL BOUNDARY\nNo external call.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT governance.record_reliable_audit_event($1,$2,$3,$4,$5,$6,$7::jsonb,$8) AS audit_result;",
+          "options": {
+            "queryReplacement": "={{ [ 'EVT-EMAIL-NOT-' + $json.delivery_request.request_id, $json.delivery_request.request_id, $json.delivery_request.correlation_id, 'email_delivery_not_performed', 'delivery', 'n8n_email_delivery_adapter', JSON.stringify({principal_key:$json.delivery_request.principal_key,provider:'gmail',reason:$json.email_delivery_result.reason,status:'not_performed'}), null ] }}"
+          }
+        },
+        "id": "em13audnot",
+        "name": "AUD | Log Email Non-Delivery",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 2.7,
+        "position": [
+          760,
+          160
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "REVINTPGAUDITWR001",
+            "name": "REVINT | Audit Writer"
+          }
+        },
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nAUD | Log Email Non-Delivery\n\nPURPOSE\nRecords why email delivery did not occur.\n\nCONTROL BOUNDARY\nNo report body or OAuth data persisted.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      },
+      {
+        "parameters": {
+          "jsCode": "const a=$('REP | Email Delivery Not Performed').isExecuted ? $('REP | Email Delivery Not Performed').item.json : $('REP | Email Payload Rejected').item.json; return {delivery_result:a.email_delivery_result};"
+        },
+        "id": "em14retnot",
+        "name": "REP | Return Email Non-Delivery Result",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1000,
+          160
+        ],
+        "notes": "WORKFLOW\nREVINT-V2-EMAIL-01 | Governed Email Report Delivery\n\nNODE\nREP | Return Email Non-Delivery Result\n\nPURPOSE\nReturns bounded non-delivery status.\n\nCONTROL BOUNDARY\nNo internal secrets exposed.\n\nDOCUMENTATION STATUS\nEmail delivery adapter — 2026-09-29."
+      }
+    ],
+    "connections": {
+      "INT | Governed Email Delivery Adapter": {
+        "main": [
+          [
+            {
+              "node": "DB | Resolve Email Authorization",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DB | Resolve Email Authorization": {
+        "main": [
+          [
+            {
+              "node": "CTX | Attach Email Authorization",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Attach Email Authorization": {
+        "main": [
+          [
+            {
+              "node": "VAL | Email Delivery Authorized?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Email Delivery Authorized?": {
+        "main": [
+          [
+            {
+              "node": "REP | Build Email Report Payload",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "REP | Email Delivery Not Performed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Build Email Report Payload": {
+        "main": [
+          [
+            {
+              "node": "VAL | Email Payload Valid?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "VAL | Email Payload Valid?": {
+        "main": [
+          [
+            {
+              "node": "DEL | Send Gmail Report",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "REP | Email Payload Rejected",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "DEL | Send Gmail Report": {
+        "main": [
+          [
+            {
+              "node": "CTX | Normalize Email Delivery",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "CTX | Normalize Email Delivery": {
+        "main": [
+          [
+            {
+              "node": "AUD | Log Email Delivery",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AUD | Log Email Delivery": {
+        "main": [
+          [
+            {
+              "node": "REP | Return Email Delivery Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Email Delivery Not Performed": {
+        "main": [
+          [
+            {
+              "node": "AUD | Log Email Non-Delivery",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "REP | Email Payload Rejected": {
+        "main": [
+          [
+            {
+              "node": "AUD | Log Email Non-Delivery",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "AUD | Log Email Non-Delivery": {
+        "main": [
+          [
+            {
+              "node": "REP | Return Email Non-Delivery Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1",
+      "availableInMCP": false,
+      "errorWorkflow": "REVINTV2SYSERROR01"
+    },
+    "versionId": "35f7882e-e5a2-4f41-bd7d-72a4a0b715a9",
+    "tags": []
+  }
+]
