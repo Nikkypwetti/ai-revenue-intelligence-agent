@@ -59,9 +59,16 @@ for i in $(seq 1 40); do
   sleep 2
 done
 
-"${compose[@]}" exec -T reporting-db psql -X -q -v ON_ERROR_STOP=1   -U "$REPORTING_DB_ADMIN_USER" -d "$REPORTING_DB_NAME"   -c "UPDATE governance.delivery_adapter_config
+"${compose[@]}" exec -T reporting-db psql -X -q -v ON_ERROR_STOP=1   -U "$REPORTING_DB_ADMIN_USER" -d "$REPORTING_DB_NAME"   -c "
+      BEGIN;
+      UPDATE governance.delivery_adapter_config
       SET slack_report_enabled=$enabled,updated_at=now()
-      WHERE config_id=1;" >/dev/null
+      WHERE config_id=1;
+
+      UPDATE governance.reliability_policy
+      SET active=$enabled,updated_at=now()
+      WHERE component_key='slack_delivery';
+      COMMIT;" >/dev/null
 
 trap - EXIT
 echo "PASS: Agent V2 delivery adapter deployed."
