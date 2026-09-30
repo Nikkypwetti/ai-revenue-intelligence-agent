@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="${ENV_FILE:-$ROOT_DIR/deploy/.env}"
 COMPOSE_FILE="${COMPOSE_FILE:-$ROOT_DIR/deploy/docker-compose.yml}"
+RELIABILITY_SEED="$ROOT_DIR/database/seeds/011_delivery_reliability.sql"
+DEPLOY_SCRIPT="$ROOT_DIR/scripts/deploy-delivery-adapter.sh"
+CONFIGURE_SCRIPT="$ROOT_DIR/scripts/configure-slack-report-delivery.sh"
 
 set -a
 source "$ENV_FILE"
@@ -117,4 +120,13 @@ echo "PASS: delivery defaults disabled."
 echo "PASS: trusted destination resolves only after explicit enablement."
 echo "PASS: delivery is role-gated and sales-rep delivery fails closed."
 echo "PASS: reporting reader can resolve delivery without reading destination registry."
+
+grep -q "'slack_delivery'" "$RELIABILITY_SEED"
+grep -q "60, false" "$RELIABILITY_SEED"
+grep -q "SET active=\$enabled" "$DEPLOY_SCRIPT"
+grep -q "WHERE component_key='slack_delivery'" "$DEPLOY_SCRIPT"
+grep -q "SET active=\$ENABLE" "$CONFIGURE_SCRIPT"
+grep -q "WHERE component_key='slack_delivery'" "$CONFIGURE_SCRIPT"
+echo "PASS: safe-disabled Slack delivery is excluded from active reliability/observability state."
+
 echo "PASS: reusable Agent V2 multi-channel delivery adapter verification passed."
