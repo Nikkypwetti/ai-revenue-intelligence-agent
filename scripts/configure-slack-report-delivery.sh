@@ -64,6 +64,10 @@ ON CONFLICT (destination_key) DO UPDATE SET
 UPDATE governance.delivery_adapter_config
 SET slack_report_enabled=$ENABLE,updated_at=now()
 WHERE config_id=1;
+
+UPDATE governance.reliability_policy
+SET active=$ENABLE,updated_at=now()
+WHERE component_key='slack_delivery';
 COMMIT;"
 
 echo "PASS: Slack report destination configured for tenant $tenant."
