@@ -38,6 +38,7 @@ authenticated manager/service
 - Delivery requires an active principal and an allowed role.
 - The default report-delivery policy allows revenue admins/managers and denies sales reps.
 - Slack and Gmail use dedicated Agent V2 credentials stored encrypted in n8n.
+- Slack reliability/observability becomes active only when Slack report delivery is enabled; a safe-disabled provider is not counted as an unknown runtime component.
 - Raw provider responses, OAuth tokens, message bodies, and trusted destinations are not written to report audit events.
 - Delivery failure cannot change the governed KPI result.
 
