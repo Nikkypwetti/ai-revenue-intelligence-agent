@@ -1,4 +1,4 @@
-# AI Revenue Intelligence & Reporting Agent
+# AI Revenue Intelligence & Revenue Systems Agent V2
 
 A governed self-service revenue reporting system that turns manager questions into validated, auditable insights across **Slack, web forms, REST APIs, PostgreSQL, n8n, and Power BI**.
 
@@ -187,17 +187,26 @@ Result           Alert
 | Audit logging | PostgreSQL |
 | Error management | Centralized n8n error workflow |
 
-## Sanitized n8n workflow exports
+## Agent V2 workflow architecture
 
-Portfolio-safe versions of the three core n8n workflows are included in the repository:
+The rebuilt Agent V2 runtime is split into focused workflows instead of one legacy monolith:
 
-- [REVINT-01 — Manager Request Orchestrator](workflows/sanitized-workflow-exports/REVINT-01.sanitized.json)
-- [REVINT-06 — Manager Form Gateway](workflows/sanitized-workflow-exports/REVINT-06.sanitized.json)
-- [REVINT-SYS-01 — Error Handler](workflows/sanitized-workflow-exports/REVINT-SYS-01.sanitized.json)
+- `REVINT-V2-AGENT-01` — governed report Agent Core
+- `REVINT-V2-AI-01` — Groq intent + grounded management-summary adapter
+- `REVINT-V2-HUBSPOT-01` — read-only incremental HubSpot Deal sync
+- `REVINT-V2-REST-01` — authenticated canonical deal ingestion
+- `REVINT-V2-EMAIL-01` — governed Gmail report delivery
+- `REVINT-V2-DELIVERY-01` — governed Slack report delivery
+- `REVINT-V2-SCHEDULED-01` — proactive pipeline intelligence
+- `REVINT-V2-OBS-01` — runtime observability
+- `REVINT-V2-CONTROL-01` — local read-only Control Center
+- `REVINT-V2-SYS-01` — runtime reliability/error handling
+- `REVINT-V2-SALESFORCE-01` — guarded Salesforce Opportunity adapter
+- `REVINT-V2-AIRTABLE-01` — guarded Airtable Opportunity adapter
+- `REVINT-V2-INCIDENT-01` — governed incident notifications
+- `REVINT-V2-FORM-01` — SSO-ready manager form adapter
 
-See the [workflow documentation](workflows/README.md) for responsibilities, security boundaries, and publication notes.
-
-> These are sanitized portfolio exports. Credentials, secrets, instance metadata, and private runtime configuration are intentionally excluded.
+The repository workflow templates contain no client secrets. Runtime credentials are created and stored separately in encrypted n8n credential storage.
 
 ## Governed query execution
 
@@ -267,20 +276,24 @@ Audit records capture request identity, correlation identity, workflow execution
 9. Audit logging
 10. Centralized error handling
 
-## Evidence
+## Current Agent V2 evidence
 
-The `docs/images/` folder is reserved for the verified portfolio evidence set:
+The current rebuild is evidenced separately from the legacy agent. The recruiter-facing V2 evidence set includes:
 
-- `revint-01-main-orchestrator.png`
-- `revint-02-approved-api-report.png`
-- `revint-03-safe-rejection.png`
-- `revint-04-postgres-security.png`
-- `revint-05-kpi-catalogue.png`
-- `revint-06-slack-report.png`
-- `revint-07-form-report.png`
-- `revint-08-powerbi-dashboard.png`
-- `revint-09-audit-traceability.png`
-- `revint-10-error-handler.png`
+- Agent Core overview — rebuilt 28-node governed request/delivery core
+- Healthy Control Center — 37 governed KPIs, 6 active managed components, 0 open dead letters
+- Live authenticated manager question — governed `open_pipeline = $1,200 USD`
+- Groq structured-intent execution
+- Groq grounded management-summary execution
+- Governed Gmail delivery confirmation and received manager report
+- HTTP 403 rejection for an unauthenticated report request
+- Server-bound identity proof showing caller-supplied fake admin identity replaced by `service:report-api`
+- Live HubSpot incremental sync
+- HubSpot records present in the canonical reporting layer
+
+The public portfolio is the primary visual evidence surface. The older `docs/images/revint-01...` assets document the legacy implementation and should not be presented as evidence for Agent V2.
+
+See [Agent V2 Project Walkthrough](docs/project-walkthrough.md) for the business story, personal ownership, live proof, security model, incident-recovery story, and current activation state.
 
 ## Repository safety
 
