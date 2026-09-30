@@ -65,6 +65,10 @@ The current laptop deployment can complete substantial production hardening befo
 
 See [Local Production Hardening](docs/local-production-hardening.md).
 
+## Project Walkthrough
+
+For a business-first explanation of the problem, architecture, personal ownership, live evidence, security model, recovery story, reusable CRM design, and current activation state, see [Agent V2 Project Walkthrough](docs/project-walkthrough.md).
+
 ## Local Control Dashboard
 
 **REVINT-V2-CONTROL-01** adds a local-only, read-only Control Center for Agent V2 operations. It uses the existing Reporting RO credential to show governed KPI count, connector activation, runtime/component health, circuit state, recent failures, dead-letter backlog and active observability alerts. The route is GET-only, loopback-only, excluded from the public nginx ingress, and contains no mutation controls.
