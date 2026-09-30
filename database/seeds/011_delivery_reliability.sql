@@ -10,7 +10,7 @@ VALUES (
   'slack_delivery',
   'REVINTV2DELIVERY01',
   'Governed Slack report delivery',
-  2, 2000, 3, 600, 60, true
+  2, 2000, 3, 600, 60, false
 )
 ON CONFLICT (component_key) DO UPDATE SET
   workflow_id=EXCLUDED.workflow_id,
