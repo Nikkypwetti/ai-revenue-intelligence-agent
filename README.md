@@ -278,22 +278,36 @@ Audit records capture request identity, correlation identity, workflow execution
 
 ## Current Agent V2 evidence
 
-The current rebuild is evidenced separately from the legacy agent. The recruiter-facing V2 evidence set includes:
+The current rebuild is evidenced separately from the legacy agent. These screenshots are from the live Agent V2 implementation and are also used in the public portfolio case study.
 
-- Agent Core overview — rebuilt 28-node governed request/delivery core
-- Healthy Control Center — 37 governed KPIs, 6 active managed components, 0 open dead letters
-- Live authenticated manager question — governed `open_pipeline = $1,200 USD`
+### Rebuilt Agent Core
+
+![Agent V2 Governed Report Agent Core](https://raw.githubusercontent.com/Nikkypwetti/nikkytechies-portfolio/main/public/images/projects/revenue-intelligence/revint-v2-00-agent-core-overview.webp)
+
+The 28-node Agent Core binds trusted identity, prepares and interprets reporting intent, validates execution readiness, runs governed management reporting, builds presentation artifacts, records audit events, and routes approved API/Slack/Gmail delivery.
+
+### Healthy Control Center
+
+![Agent V2 Healthy Control Center](https://raw.githubusercontent.com/Nikkypwetti/nikkytechies-portfolio/main/public/images/projects/revenue-intelligence/revint-v2-01-control-center-healthy.webp)
+
+Validated live state: **HEALTHY**, **37 governed KPIs**, **6 active managed components**, **0 open dead letters**, and no recent failures. HubSpot and REST ingestion are active; Salesforce and Airtable remain intentionally safe-disabled pending their activation controls.
+
+### Live governed manager question
+
+![Agent V2 governed open-pipeline report](https://raw.githubusercontent.com/Nikkypwetti/nikkytechies-portfolio/main/public/images/projects/revenue-intelligence/revint-v2-02-live-api-governed-report.webp)
+
+A live authenticated request for `What is our open pipeline this month?` returned the governed `open_pipeline` result of **$1,200 USD** through the approved reporting path.
+
+Additional live evidence covers:
+
 - Groq structured-intent execution
-- Groq grounded management-summary execution
-- Governed Gmail delivery confirmation and received manager report
 - HTTP 403 rejection for an unauthenticated report request
-- Server-bound identity proof showing caller-supplied fake admin identity replaced by `service:report-api`
-- Live HubSpot incremental sync
-- HubSpot records present in the canonical reporting layer
+- server-bound identity proof showing a caller-supplied fake admin identity replaced by `service:report-api`
+- live HubSpot incremental sync into the canonical reporting layer
 
-The public portfolio is the primary visual evidence surface. The older `docs/images/revint-01...` assets document the legacy implementation and should not be presented as evidence for Agent V2.
+The older `docs/images/revint-01...` assets document the legacy implementation and are retained only as historical project evidence; they should not be interpreted as Agent V2 runtime proof.
 
-See [Agent V2 Project Walkthrough](docs/project-walkthrough.md) for the business story, personal ownership, live proof, security model, incident-recovery story, and current activation state.
+See [Agent V2 Project Walkthrough](docs/project-walkthrough.md) for the business story, personal ownership, live proof, security model, incident-recovery story, reusable CRM design, and current activation state.
 
 ## Repository safety
 
