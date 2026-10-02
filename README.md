@@ -1,13 +1,13 @@
 # AI Revenue Intelligence & Revenue Systems Agent V2
 
-A governed self-service revenue reporting system that turns manager questions into validated, auditable insights across **Slack, web forms, REST APIs, PostgreSQL, n8n, and Power BI**.
+A completed governed self-service Revenue Intelligence and Revenue Systems platform that turns manager questions into validated, auditable insights across **REST APIs, PostgreSQL, n8n, Groq, HubSpot and Gmail**, with reusable CRM adapters, identity controls, reliability handling and operational observability.
 
 > **Design principle:** AI interprets the request. Deterministic controls authorize execution. PostgreSQL permissions enforce the final security boundary.
 
 
-## Agent v2 — deployable business edition
+## Agent V2 — completed portfolio implementation
 
-Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent execution core, Scheduled Intelligence, the runtime Reliability core, Monitoring & Observability, Backup & Recovery, Upgrade & Rollback, and HTTPS & Public Ingress are merged and locally verified. The External Authentication / SSO foundation is also locally verified in its disabled-by-default state on the isolated Agent v2 deployment.
+The Agent V2 portfolio implementation is complete and locally verified across the deployment foundation, KPI semantic layer, identity/permissions, governed Agent execution core, Scheduled Intelligence, Reliability, Monitoring & Observability, Backup & Recovery, Upgrade & Rollback, HTTPS/Public Ingress and the read-only Control Center. The External Authentication / SSO foundation is also locally verified in its disabled-by-default state on the isolated Agent v2 deployment.
 
 **Stage 1** provides the reproducible single-business Docker deployment foundation with separate n8n and reporting databases, persistent volumes, health checks, local-only access, environment-based configuration, and deployment validation.
 
@@ -49,7 +49,7 @@ Stages 1–4, the KPI semantic layer, identity/permissions, the governed Agent e
 
 See [Stage 1 deployment documentation](docs/deployment-stage-1.md), [Stage 2 documentation](docs/deployment-stage-2.md), [Stage 3 documentation](docs/deployment-stage-3.md), [Stage 4 runtime documentation](docs/deployment-stage-4.md), [KPI semantic-layer documentation](docs/semantic-layer.md), [identity/permissions documentation](docs/identity-permissions.md), [Agent execution-core documentation](docs/agent-execution-core.md), [Governed Intelligence Adapter documentation](docs/intelligence-adapter-v2.md), [Reusable Security Gateway documentation](docs/security-gateway.md), [Scheduled Intelligence documentation](docs/scheduled-intelligence.md), [Reliability documentation](docs/reliability-core.md), [Monitoring & Observability documentation](docs/observability-core.md), [Backup & Recovery documentation](docs/backup-recovery.md), [Upgrade & Rollback documentation](docs/upgrade-rollback.md), [HTTPS & Public Ingress documentation](docs/https-ingress.md), and [External Authentication / SSO documentation](docs/external-sso.md), plus [SSO Manager Form documentation](docs/manager-form-v2.md).
 
-> These stages are production-foundation work, not a claim of full production readiness. The governed LLM adapter is implemented but remains safe-disabled until a dedicated Agent V2 Groq credential is configured. Additional CRM/billing adapters (such as Salesforce/Airtable), external Slack/email delivery and incident notifications, encrypted off-site backup replication, activation on a real public domain with a trusted production certificate, and an end-to-end login against the client's real identity provider remain deployment work. The HubSpot connector is live-validated locally but each client deployment still requires its own read-only credential, mapping/configuration review, and isolated environment.
+> **Completion boundary:** the portfolio implementation and its local verification are complete. This is not a claim that every client-deployment control is activated in a real production tenant; external identity, client-specific connector credentials, real delivery channels and public client infrastructure remain intentionally safe-disabled until those deployment conditions exist. The governed LLM adapter is implemented but remains safe-disabled until a dedicated Agent V2 Groq credential is configured. Additional CRM/billing adapters (such as Salesforce/Airtable), external Slack/email delivery and incident notifications, encrypted off-site backup replication, activation on a real public domain with a trusted production certificate, and an end-to-end login against the client's real identity provider remain deployment work. The HubSpot connector is live-validated locally but each client deployment still requires its own read-only credential, mapping/configuration review, and isolated environment.
 
 ## First real client implementation
 
@@ -278,7 +278,7 @@ Audit records capture request identity, correlation identity, workflow execution
 
 ## Current Agent V2 evidence
 
-The current rebuild is evidenced separately from the legacy agent. These screenshots are from the live Agent V2 implementation and are also used in the public portfolio case study.
+The completed Agent V2 implementation is evidenced separately from the legacy agent. These screenshots are from the live Agent V2 implementation and are also used in the public portfolio case study.
 
 ### Rebuilt Agent Core
 
